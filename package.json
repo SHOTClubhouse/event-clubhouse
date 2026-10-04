@@ -1,0 +1,22 @@
+{
+  "name": "event-clubhouse",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SHOT Event Clubhouse: pre-registration, live scores, fixtures, fight cards, fan voting and the community after, for any event.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "dev": "wrangler dev --local --persist-to .wrangler/state",
+    "db:local": "wrangler d1 execute event-clubhouse --local --persist-to .wrangler/state --file schema.sql",
+    "db:remote": "wrangler d1 execute event-clubhouse --remote --file schema.sql",
+    "seed:local": "node scripts/seed.js --local",
+    "seed:remote": "node scripts/seed.js --remote",
+    "e2e": "node tests/e2e/run.mjs",
+    "deploy": "npm test && wrangler deploy"
+  },
+  "engines": { "node": ">=22" },
+  "devDependencies": {
+    "playwright": "^1.55.0",
+    "wrangler": "^4.0.0"
+  }
+}
