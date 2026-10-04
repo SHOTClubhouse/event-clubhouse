@@ -31,5 +31,5 @@ export async function mutateEvent(db, slug, fn, { tries = 5, now = () => Date.no
     if (out.unchanged) return { ok: true, rev: row.rev, doc: row.doc, row, result: out.result, written: false };
     if (await casWrite(db, row.id, row.rev, out.doc, now())) return { ok: true, rev: row.rev + 1, doc: out.doc, row, result: out.result, written: true };
   }
-  return { ok: false, status: 409, error: "Lots of people are saving at once. Wait a moment and try again." };
+  return { ok: false, status: 503, retry: true, error: "Lots of people are saving at once. Trying again." };
 }

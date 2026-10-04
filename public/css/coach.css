@@ -1,0 +1,49 @@
+/* Coach dashboard. Builds on app.css and ref.css. Every class here starts ecc-. */
+
+.ecc-team { display: grid; gap: 4px; }
+.ecc-team .ec-d2 { overflow-wrap: anywhere; }
+.ecc-next { display: grid; gap: 4px; }
+.ecc-next.is-live { border-color: var(--accent); box-shadow: inset 4px 0 0 var(--accent); }
+.ecc-big { margin: 0; font-family: var(--display); font-size: 3.4rem; line-height: 1; }
+.ecc-vs { margin: 0; font-family: var(--display); font-size: 1.9rem; text-transform: uppercase; line-height: 1.05; overflow-wrap: anywhere; }
+.ecc-score { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: center; font-weight: 800; }
+.ecc-score strong { font-family: var(--display); font-size: 2.6rem; line-height: 1; }
+.ecc-score span:last-child { text-align: right; }
+
+.ecc-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.ecc-flat { padding: 0; }
+.ecc-game, .ecc-ko { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line-soft); min-height: 56px; }
+.ecc-game:last-child, .ecc-ko:last-child { border-bottom: 0; }
+.ecc-ko { background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--r); margin-bottom: 8px; }
+.ecc-game__t { font-family: var(--display); font-size: 1.15rem; }
+.ecc-game__m { display: grid; gap: 1px; min-width: 0; overflow-wrap: anywhere; }
+.ecc-game__r { text-align: right; font-size: 0.9rem; }
+.ecc-res--w strong { color: var(--accent); }
+.ecc-res--l strong { color: #ff8a8a; }
+.ecc-res--d strong { color: var(--gold); }
+.ecc-me { font-weight: 800; color: var(--accent); }
+
+.ecc-tablewrap { background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--r); overflow: hidden; }
+.ecc-table { font-size: 0.9rem; }
+.ecc-table th, .ecc-table td { padding: 10px 6px; }
+.ecc-table th:first-child, .ecc-table td:first-child { padding-left: 12px; }
+.ecc-table th:last-child, .ecc-table td:last-child { padding-right: 12px; }
+.ecc-table tbody th { text-align: left; font-weight: 600; text-transform: none; letter-spacing: 0; font-size: 0.9rem; color: var(--text); overflow-wrap: anywhere; }
+.ecc-table tr.is-me td, .ecc-table tr.is-me th { background: rgba(255, 255, 255, 0.08); font-weight: 800; }
+.ecc-table tr.is-me td:first-child { box-shadow: inset 4px 0 0 var(--accent); }
+.ecc-you { display: inline-block; margin-left: 4px; padding: 1px 8px; border-radius: 99px; background: var(--accent); color: var(--on-accent); font-size: 0.65rem; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; }
+.ecc-opt { display: none; }
+@media (min-width: 420px) { .ecc-opt { display: table-cell; } }
+
+.ecc-squad, .ecc-share { display: grid; gap: 14px; }
+.ecc-squad h2, .ecc-share h2 { margin: 0; }
+.ecc-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ecc-prow { display: grid; grid-template-columns: 76px minmax(0, 1fr) 48px; gap: 8px; align-items: end; }
+.ecc-prow .ec-input { min-height: 48px; }
+.ecc-num .ec-input { text-align: center; font-weight: 800; }
+.ecc-rm { min-width: 48px; min-height: 48px; padding: 0; font-size: 1.5rem; }
+.ecc-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.ecc-bulk summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 800; color: var(--accent); }
+.ecc-bulk[open] { display: grid; gap: 10px; }
+.ecc-save { display: grid; gap: 8px; }
+.ecc-link { margin: 0; overflow-wrap: anywhere; font-size: 0.9rem; }

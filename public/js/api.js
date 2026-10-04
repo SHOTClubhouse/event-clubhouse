@@ -98,7 +98,7 @@ export function watchEvent(slug, onChange, { every = 5000, path = `/api/events/$
     const t = setTimeout(() => ctrl.abort(), 8000);
     try {
       const r = await api.get(`${path}${path.includes("?") ? "&" : "?"}rev=${rev}`, { signal: ctrl.signal, token });
-      if (r && r.rev !== rev) { rev = r.rev; onChange(r.event, r.rev); }
+      if (r && r.rev !== rev) { rev = r.rev; onChange(r.event, r.rev, r); } // r: the whole response (me, squad, judging, counts)
     } catch (e) { if (onError) onError(e); }
     clearTimeout(t);
     timer = setTimeout(tick, every);

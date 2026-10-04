@@ -28,7 +28,13 @@ export function roleView(doc, rev, actor, counts) {
         if (byJudge && byJudge[actor.subject]) event.scorecards[bout] = { ...(event.scorecards[bout] || {}), [actor.subject]: byJudge[actor.subject] };
       });
     }
-    return { rev, event, me };
+    // Which rounds each judge has scored (never the scores), so the referee can see who is
+    // still to score before announcing a points decision.
+    const judging = {};
+    (doc.card.bouts || []).filter((b) => b.scoring === 'judges').forEach((b) => {
+      judging[b.id] = b.judges.map((j) => ({ judge: j, name: (doc.officials.find((o) => o.id === j) || {}).name || j, rounds: Object.keys(((doc.scorecards || {})[b.id] || {})[j] || {}).map(Number).sort((x, y) => x - y) }));
+    });
+    return { rev, event, me, judging };
   }
 
   // coach
