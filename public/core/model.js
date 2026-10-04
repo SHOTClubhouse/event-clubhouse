@@ -261,6 +261,12 @@ export function streamInfo(s) {
   return { kind: "link", url: s.url, host: names[host] || host, label };
 }
 
+// ---- Pre-registration consent ----
+// The one sentence a fan agrees to. The fan page shows it and the Worker stores it with the
+// registration, both from here, so what was shown and what was recorded can never differ.
+// The organiser names themselves through theme.partner; otherwise the event name stands in.
+export const consentText = (doc) => `${(doc.theme && doc.theme.partner) || doc.name} and SHOT Clubhouse can email me about ${doc.name}, future events and the clubhouse. I can unsubscribe at any time.`;
+
 // ---- Small helpers ----
 export const teamOf = (doc, divisionId, teamId) => ((doc.divisions.find((v) => v.id === divisionId) || {}).teams || []).find((t) => t.id === teamId) || null;
 export const newId = (prefix, taken) => { let i = 1; const set = new Set(taken); while (set.has(`${prefix}${i}`)) i++; return `${prefix}${i}`; };

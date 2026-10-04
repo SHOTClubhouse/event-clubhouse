@@ -2,7 +2,7 @@
 // scheduled demo simulation. The rules (validation, ops, votes) are the modules in public/core/,
 // imported unchanged.
 
-import { blankEvent, validate, publicView, SPORTS, SLUG, DATE } from "../public/core/model.js";
+import { blankEvent, validate, publicView, consentText, SPORTS, SLUG, DATE } from "../public/core/model.js";
 import { applyOps } from "../public/core/ops.js";
 import { checkVote } from "../public/core/votes.js";
 import { HttpError, json, fail, noContent, readJson, MAX_DOC_BODY, secureHtml, isHtml, notFoundPage } from "./http.js";
@@ -121,10 +121,7 @@ async function register(env, request, row, now) {
   if (email.length > 254 || !EMAIL.test(email)) return fail(400, "That email address doesn't look right. Check it and try again.");
   if (body.over13 !== true) return fail(400, "Pre-registration is for people aged 13 and over.");
   if (body.consent !== true) return fail(400, "Tick the box to say you're happy to hear from us.");
-  let who = row.doc.theme && row.doc.theme.partner;
-  if (!who && row.organiser) { const o = await env.DB.prepare("SELECT name FROM organisers WHERE id = ?").bind(row.organiser).first(); who = o && o.name; }
-  who = who || row.doc.name;
-  const consent = `${who} and SHOT Clubhouse can email me about ${row.doc.name}, future events and the clubhouse. I can unsubscribe at any time.`;
+  const consent = consentText(row.doc); // the exact sentence the fan page showed
   const r = await env.DB.prepare("INSERT OR IGNORE INTO registrations (id, event_id, first_name, email, consent, ip_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(randomId(), row.id, firstName, email, consent, ip, now).run();
   return json(r.meta.changes === 1 ? { ok: true } : { ok: true, already: true });
 }

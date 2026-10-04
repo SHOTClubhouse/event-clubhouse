@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { blankEvent, validate, publicView, playerLabel, streamInfo, addMins } from "../public/core/model.js";
+import { blankEvent, validate, publicView, playerLabel, streamInfo, addMins, consentText } from "../public/core/model.js";
 import { generate, roundRobin, snakeGroups, seedOrder, bracket, checkOptions } from "../public/core/generator.js";
 import { standings, resolve, champion, winnerOf, tables } from "../public/core/standings.js";
 import { decision, judgeCard, cardsComplete, resultText, nextState } from "../public/core/boxing.js";
@@ -316,6 +316,13 @@ test("football vote: only players in a live game, by number, locks a minute afte
   const t = tally([{ target: `g:${f.id}`, choice: homePlayer, reason: null, n: 4 }], d, 71000);
   assert.equal(t.leaders[0].votes, 4);
   assert.equal(t.leaders[0].label, "#7");
+});
+
+test("the consent sentence names the partner, or the event when there isn't one", () => {
+  const d = blankEvent({ slug: "x-cup", name: "X Cup" });
+  assert.equal(consentText(d), "X Cup and SHOT Clubhouse can email me about X Cup, future events and the clubhouse. I can unsubscribe at any time.");
+  d.theme.partner = "X Promotions";
+  assert.match(consentText(d), /^X Promotions and SHOT Clubhouse can email me about X Cup,/);
 });
 
 test("time helpers wrap midnight", () => { assert.equal(addMins("23:55", 10), "00:05"); });

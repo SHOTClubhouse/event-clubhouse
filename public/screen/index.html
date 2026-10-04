@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#020304">
+  <meta name="color-scheme" content="dark">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Big screen | SHOT Event Clubhouse</title>
+  <link rel="icon" href="/assets/brand/shot-logo.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;600;800;900&display=swap">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/screen.css">
+</head>
+<body class="ecv-body">
+  <button id="fs" class="ecv-fs" type="button">Click for full screen</button>
+  <div class="ecv">
+    <header class="ecv-head">
+      <div id="partner" class="ecv-partner"></div>
+      <h1 id="title" class="ecv-name"></h1>
+      <span id="livetag" class="ecv-livetag" hidden>Live</span>
+      <span id="phase" class="ecv-phase"></span>
+      <span id="stale" class="ecv-stale" hidden></span>
+      <span id="clock" class="ecv-clock"></span>
+    </header>
+    <main id="stage" class="ecv-stage" aria-live="off"></main>
+    <footer class="ecv-foot">
+      <div id="fqr" class="ecv-fqr" role="img" aria-label="QR code for the fan page"></div>
+      <div class="ecv-follow"><span>Follow every score, vote and see the tables on your phone</span><b id="furl"></b></div>
+      <span id="fpartner" class="ecv-fpartner"></span>
+      <div id="dots" class="ecv-dots" aria-hidden="true"></div>
+      <span class="ecv-powered">Powered by <img src="/assets/brand/shot-logo.png" alt="SHOT"></span>
+    </footer>
+  </div>
+  <div id="goal" class="ecv-goalwrap" hidden></div>
+  <script type="module" src="/js/screen.js"></script>
+</body>
+</html>
