@@ -5,3 +5,5 @@ node_modules/
 private/
 *.log
 logs/
+HANDOFF.md
+NEXT_PROMPT.md
