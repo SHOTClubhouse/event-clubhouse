@@ -139,6 +139,7 @@ async function fullView(env, row, actor) {
       env.DB.prepare("SELECT COUNT(*) AS n FROM votes WHERE event_id = ?").bind(row.id).first(),
     ]);
     counts = { registrations: reg.n, votes: votes.n };
+    return { ...roleView(row.doc, row.rev, actor, counts), demo: !!row.demo };
   }
   return roleView(row.doc, row.rev, actor, counts);
 }
@@ -272,6 +273,18 @@ async function organiserEvents(env, request, now) {
   return json({ events: results.map((r) => { const d = JSON.parse(r.doc); return { slug: d.slug, name: d.name, sport: d.sport, date: d.date, phase: d.phase, listed: !!r.listed, created_at: r.created_at }; }) });
 }
 
+// An organiser opens one of their own events without typing its admin code: the session is
+// tied to the event's oldest live admin code, so revoking that code still ends it.
+async function organiserSession(env, request, slug, now) {
+  const o = await organiserActor(env, request, now);
+  const row = await env.DB.prepare("SELECT id, slug, json_extract(doc, '$.name') AS name, json_extract(doc, '$.sport') AS sport FROM events WHERE slug = ? AND organiser = ?").bind(slug, o.id).first();
+  if (!row) return fail(404, "That isn't one of your events.");
+  const c = await env.DB.prepare("SELECT id, label FROM codes WHERE event_id = ? AND role = 'admin' AND revoked = 0 ORDER BY created_at LIMIT 1").bind(row.id).first();
+  if (!c) return fail(409, "This event has no admin code left. Ask SHOT to restore access.");
+  const token = await signToken(secret(env), { e: row.id, r: "admin", s: null, c: c.id, x: now + TOKEN_TTL });
+  return json({ token, role: "admin", subject: null, label: c.label, event: { slug: row.slug, name: row.name, sport: row.sport } });
+}
+
 async function createEvent(env, request, now) {
   const o = await organiserActor(env, request, now);
   const body = await readJson(request);
@@ -341,6 +354,7 @@ async function api(request, env, url, now) {
     if (b === "events" && c && SLUG.test(c) && d === "listing") return shotListing(env, request, c);
   }
   if (a === "organiser" && b === "events" && !c) { allow("GET"); return organiserEvents(env, request, now); }
+  if (a === "organiser" && b === "events" && c && SLUG.test(c) && d === "session" && p.length === 5) { allow("POST"); return organiserSession(env, request, c, now); }
 
   if (a === "events") {
     if (!b) {

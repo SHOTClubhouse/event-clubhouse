@@ -37,6 +37,14 @@ async function request(method, path, { body, token, signal } = {}) {
 
 export const api = {
   get: (path, opts) => request("GET", path, opts),
+  // Plain text (e.g. the registrations CSV), with the same errors as everything else.
+  async text(path, { token } = {}) {
+    let res;
+    try { res = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {}, cache: "no-store" }); }
+    catch (e) { throw new ApiError("No connection. Check your signal and try again.", 0); }
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new ApiError(d.error || `Something went wrong (${res.status}).`, res.status, d); }
+    return res.text();
+  },
   post: (path, body, opts) => request("POST", path, { ...opts, body }),
   put: (path, body, opts) => request("PUT", path, { ...opts, body }),
 };
@@ -67,6 +75,15 @@ export async function organiserSignIn(key) {
   const r = await api.post("/api/auth/organiser", { key: String(key || "").trim() });
   write("ec.organiser.v1", { token: r.token, organiser: r.organiser });
   return r;
+}
+// Opens one of the organiser's own events on this device, without its admin code.
+export async function organiserOpen(slug) {
+  const o = organiser();
+  const r = await api.post(`/api/organiser/events/${slug}/session`, {}, { token: o && o.token });
+  const all = sessions();
+  all[r.event.slug] = { token: r.token, role: r.role, subject: r.subject, label: r.label, event: r.event, at: Date.now() };
+  write(STORE, all);
+  return { slug: r.event.slug, ...all[r.event.slug] };
 }
 export function organiserSignOut() { try { localStorage.removeItem("ec.organiser.v1"); } catch (e) { /* ignore */ } }
 

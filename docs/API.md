@@ -90,8 +90,8 @@ Limited to 10 a minute per connection. First name 1 to 40 characters, a plausibl
 ## Staff (token required)
 
 ### GET /api/events/:slug/full[?rev=N]
-- admin: `{ rev, event }` with the full document (private names included), plus
-  `{ counts: { registrations, votes } }`.
+- admin: `{ rev, event, demo }` with the full document (private names included), plus
+  `{ counts: { registrations, votes } }`. `demo` is true for demo and prospect demo events.
 - referee, judge: `{ rev, event: publicView(doc), me: { id, name, role, pitch } }`. Judges also
   get their own cards: `event.scorecards` holds every card **they** have scored, even before the
   bout is done.
@@ -126,6 +126,7 @@ Admin of a **demo** event only (403 otherwise): puts the demo back to its seed.
 ## Organiser
 
 - `GET /api/organiser/events` → the organiser's events.
+- `POST /api/organiser/events/:slug/session` → the same answer as `POST /api/auth`, an admin session for one of the organiser's own events (tied to the event's oldest live admin code). 404 if it isn't theirs.
 - `POST /api/events` `{ name, sport, date?, slug? }` → `{ slug, adminCode, event }`. Creates the
   event from `blankEvent()`, an admin code, and links it to the organiser. Slug defaults to the
   name, lower-cased and dashed, with a short suffix if taken.
