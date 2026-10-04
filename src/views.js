@@ -2,7 +2,7 @@
 // server. doc.private belongs to the server (demo bookkeeping, simulation state) and never
 // leaves at all.
 
-import { publicView } from "../public/core/model.js";
+import { publicView, firstName } from "../public/core/model.js";
 
 export const withoutPrivate = (doc) => { const d = { ...doc }; delete d.private; return d; };
 
@@ -32,7 +32,7 @@ export function roleView(doc, rev, actor, counts) {
     // still to score before announcing a points decision.
     const judging = {};
     (doc.card.bouts || []).filter((b) => b.scoring === 'judges').forEach((b) => {
-      judging[b.id] = b.judges.map((j) => ({ judge: j, name: (doc.officials.find((o) => o.id === j) || {}).name || j, rounds: Object.keys(((doc.scorecards || {})[b.id] || {})[j] || {}).map(Number).sort((x, y) => x - y) }));
+      judging[b.id] = b.judges.map((j) => ({ judge: j, name: firstName((doc.officials.find((o) => o.id === j) || {}).name) || j, rounds: Object.keys(((doc.scorecards || {})[b.id] || {})[j] || {}).map(Number).sort((x, y) => x - y) }));
     });
     return { rev, event, me, judging };
   }

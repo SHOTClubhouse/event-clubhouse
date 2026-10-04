@@ -290,7 +290,7 @@ async function register(form) {
   btn.disabled = true; btn.textContent = "Sending...";
   try {
     const r = await api.post(`/api/events/${slug}/register`, { firstName: name, email, over13: true, consent: true, website: String(v.get("website") || "") });
-    S.reg = { state: r.already ? "already" : "ok" };
+    S.reg = { state: r.demo ? "demo" : "ok" };
     saveReg(slug, S.reg);
     render();
     const h = $("#view .ece-reg--done h2"); if (h) { h.setAttribute("tabindex", "-1"); h.focus(); }

@@ -18,7 +18,9 @@ export const REASONS = ["style", "pressure", "defence", "power"];
 
 export const HTTPS = /^https:\/\/[^\s"'<>]+$/;
 export const SLUG = /^[a-z0-9](?:[a-z0-9-]{1,46}[a-z0-9])$/;
-export const ID = /^[A-Za-z0-9_-]{1,24}$/;
+// Ids are used as object keys (scorecards, tallies), so the names JavaScript gives special
+// meaning to are refused outright.
+export const ID = /^(?!(?:__proto__|constructor|prototype)$)[A-Za-z0-9_-]{1,24}$/;
 export const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const DATE = /^\d{4}-\d{2}-\d{2}$/;
 export const COLOUR = /^#[0-9a-fA-F]{6}$/;
@@ -55,7 +57,13 @@ export function blankEvent({ slug, name, sport = "football", date = null } = {})
 }
 
 // ---- Validation: the shape every saved document must have ----
+// Never throws: malformed data (a null in a list, a string where an object belongs) is an error
+// message, not a crash.
 export function validate(doc) {
+  try { return check(doc); } catch (e) { return ["event: the data is malformed"]; }
+}
+
+function check(doc) {
   const errs = [];
   const d = doc;
   if (!d || typeof d !== "object") return ["event missing"];
@@ -97,14 +105,16 @@ export function validate(doc) {
     offIds.add(o.id);
   });
 
-  const divs = {};
+  const divs = Object.create(null);
+  const teamIds = new Set();
   (Array.isArray(d.divisions) ? d.divisions : errs.push("divisions missing") && []).forEach((v) => {
     if (!ID.test(v.id || "") || divs[v.id]) errs.push(`division ${v.id}: missing or duplicate id`);
     if (!text(v.name, 40)) errs.push(`division ${v.id}: name 1 to 40 characters`);
     if (!FORMATS.includes(v.format)) errs.push(`division ${v.id}: format one of ${FORMATS.join(", ")}`);
     const ids = new Set();
     (Array.isArray(v.teams) ? v.teams : errs.push(`division ${v.id}: teams missing`) && []).forEach((t) => {
-      if (!ID.test(t.id || "") || ids.has(t.id)) errs.push(`team ${t.id}: missing or duplicate id`);
+      if (!ID.test(t.id || "") || teamIds.has(t.id)) errs.push(`team ${t.id}: missing or duplicate id (team ids are unique across divisions)`);
+      teamIds.add(t.id);
       if (!text(t.name, 40)) errs.push(`team ${t.id}: name 1 to 40 characters`);
       if (t.group != null && !(typeof t.group === "string" && /^[A-Za-z0-9]{1,4}$/.test(t.group))) errs.push(`team ${t.id}: group is 1 to 4 letters or numbers`);
       errs.push(...playerErrors(t.players, `team ${t.id}`));

@@ -121,9 +121,14 @@ async function register(env, request, row, now) {
   if (email.length > 254 || !EMAIL.test(email)) return fail(400, "That email address doesn't look right. Check it and try again.");
   if (body.over13 !== true) return fail(400, "Pre-registration is for people aged 13 and over.");
   if (body.consent !== true) return fail(400, "Tick the box to say you're happy to hear from us.");
+  // The connection is only used for the rate limit above; nothing about it is kept with the email.
+  // A demo shows the form working but keeps nothing: its admin code is public.
+  if (row.demo) return json({ ok: true, demo: true });
   const consent = consentText(row.doc); // the exact sentence the fan page showed
-  const r = await env.DB.prepare("INSERT OR IGNORE INTO registrations (id, event_id, first_name, email, consent, ip_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(randomId(), row.id, firstName, email, consent, ip, now).run();
-  return json(r.meta.changes === 1 ? { ok: true } : { ok: true, already: true });
+  await env.DB.prepare("INSERT OR IGNORE INTO registrations (id, event_id, first_name, email, consent, ip_hash, created_at) VALUES (?, ?, ?, ?, ?, '-', ?)").bind(randomId(), row.id, firstName, email, consent, now).run();
+  // The same answer whether or not the email was already there, so the form can't be used to
+  // check who has registered.
+  return json({ ok: true });
 }
 
 // ---------------------------------------------------------------- staff
@@ -136,9 +141,9 @@ async function fullView(env, row, actor) {
       env.DB.prepare("SELECT COUNT(*) AS n FROM votes WHERE event_id = ?").bind(row.id).first(),
     ]);
     counts = { registrations: reg.n, votes: votes.n };
-    return { ...roleView(row.doc, row.rev, actor, counts), demo: !!row.demo };
+    return { ...roleView(row.doc, row.rev, actor, counts), demo: !!row.demo, publicDemo: !!(row.demo && row.listed) };
   }
-  return roleView(row.doc, row.rev, actor, counts);
+  return { ...roleView(row.doc, row.rev, actor, counts), publicDemo: !!(row.demo && row.listed) };
 }
 
 async function full(env, request, url, row, now) {
@@ -147,11 +152,20 @@ async function full(env, request, url, row, now) {
   return json(await fullView(env, row, actor));
 }
 
+// Public demo codes are on the demo page, so a public demo can't be used to put someone else's
+// links, video or logo on a SHOT page. Private prospect demos (unlisted, codes given in person)
+// keep the full feature so it can be shown in a pitch. Everything else (scores, teams, the schedule) works as it would for real.
+const demoBlocked = (o) => !o || typeof o !== "object"
+  || (o.op === "stream.set" && !!o.url)
+  || (o.op === "update.add" && !!o.link)
+  || (o.op === "event.set" && (!!(o.theme && o.theme.logo) || o.links != null));
+
 async function ops(env, request, slug, now) {
   const row0 = await loadEvent(env.DB, slug);
   if (!row0) return fail(404, NOT_FOUND);
   const actor = await staffActor(env, request, row0, null, now);
   const body = await readJson(request);
+  if (row0.demo && row0.listed && Array.isArray(body.ops) && body.ops.some(demoBlocked)) return fail(403, "In the demo, links, video and logos stay as they are. Your own event can change them.");
   const who = { role: actor.role, id: actor.subject };
   const saved = await mutateEvent(env.DB, slug, (doc) => {
     const r = applyOps(doc, body.ops, who, now);
@@ -166,6 +180,7 @@ async function putDoc(env, request, slug, now) {
   const row0 = await loadEvent(env.DB, slug);
   if (!row0) return fail(404, NOT_FOUND);
   await staffActor(env, request, row0, ["admin"], now);
+  if (row0.demo) return fail(403, "Demo events are changed one step at a time. Your own event can be replaced whole.");
   const body = await readJson(request, MAX_DOC_BODY);
   if (!body.doc || typeof body.doc !== "object" || Array.isArray(body.doc) || !Number.isInteger(body.rev)) return fail(400, "Send the event and the version you loaded.");
   const saved = await mutateEvent(env.DB, slug, (_old, row) => {
@@ -187,6 +202,7 @@ async function codesList(env, row) {
 }
 
 async function codesCreate(env, request, row, now) {
+  if (row.demo) return fail(403, "Demo codes stay as they are. Your own event can make as many as it needs.");
   const body = await readJson(request);
   if (!ROLES.includes(body.role)) return fail(400, "Pick a role: admin, referee, judge or coach.");
   let subject = null, fallback = "";
@@ -222,6 +238,7 @@ async function codeRevoke(env, row, id) {
 const csvCell = (v) => { let s = String(v ?? ""); if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`; return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 
 async function registrations(env, url, row) {
+  if (row.demo) return fail(403, "Demo events don't keep registrations.");
   const { results } = await env.DB.prepare("SELECT first_name, email, consent, created_at FROM registrations WHERE event_id = ? ORDER BY created_at, email").bind(row.id).all();
   if (url.searchParams.get("format") === "csv") {
     const lines = [["first_name", "email", "consent", "created_at"].join(",")].concat(results.map((r) => [r.first_name, r.email, r.consent, new Date(r.created_at).toISOString()].map(csvCell).join(",")));
@@ -255,9 +272,11 @@ async function shotOrganiser(env, request, now) {
   return json({ id, key: formatCode(key) });
 }
 
-async function shotListing(env, request, slug) {
+async function shotListing(env, request, slug, now) {
+  const ip = await connection(request, env, now);
+  await limited(env, "shot", ip, 10 * 60000, 10, now, "Too many tries. Wait ten minutes and try again.");
   const given = request.headers.get("X-Shot-Admin") || "";
-  if (!env.SHOT_ADMIN || !safeEqual(given, env.SHOT_ADMIN)) return fail(403, "That isn't allowed.");
+  if (!env.SHOT_ADMIN || !safeEqual(given, env.SHOT_ADMIN)) { await noteAttempt(env.DB, "shot", ip, now); return fail(403, "That isn't allowed."); }
   const body = await readJson(request);
   if (typeof body.listed !== "boolean") return fail(400, "Say whether the event is listed: true or false.");
   const r = await env.DB.prepare("UPDATE events SET listed = ? WHERE slug = ?").bind(body.listed ? 1 : 0, slug).run();
@@ -348,7 +367,7 @@ async function api(request, env, url, now) {
   if (a === "shot") {
     allow("POST");
     if (b === "organisers" && !c) return shotOrganiser(env, request, now);
-    if (b === "events" && c && SLUG.test(c) && d === "listing") return shotListing(env, request, c);
+    if (b === "events" && c && SLUG.test(c) && d === "listing") return shotListing(env, request, c, now);
   }
   if (a === "organiser" && b === "events" && !c) { allow("GET"); return organiserEvents(env, request, now); }
   if (a === "organiser" && b === "events" && c && SLUG.test(c) && d === "session" && p.length === 5) { allow("POST"); return organiserSession(env, request, c, now); }

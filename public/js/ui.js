@@ -64,6 +64,7 @@ export function startVideos(root = document) {
       if (window.Hls) return go();
       const sc = document.createElement("script");
       sc.src = "https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.20/hls.min.js";
+      sc.integrity = "sha384-V5ruNBgmYcC3SJRUQeNykAAAgde5gOFq/Hu0CZj7bygDP0yRIhkvX8+w0u/7mRvr"; sc.crossOrigin = "anonymous";
       sc.onload = go; sc.onerror = () => (v.src = url);
       document.head.appendChild(sc);
     } else v.src = url;

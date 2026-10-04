@@ -10,7 +10,7 @@ function loadQr() {
   if (window.qrcode) return Promise.resolve();
   if (!qrLoad) qrLoad = new Promise((res, rej) => {
     const s = document.createElement("script");
-    s.src = QR_SRC; s.onload = res; s.onerror = () => { qrLoad = null; rej(new Error("QR library did not load")); };
+    s.src = QR_SRC; s.integrity = "sha384-mZT2gIty7ZDdOGkxfP6joZcYdMW1Jvj9dRlfpTmaJAKKXTqzygtB22k7FLe+KZC1"; s.crossOrigin = "anonymous"; s.onload = res; s.onerror = () => { qrLoad = null; rej(new Error("QR library did not load")); };
     document.head.append(s);
   });
   return qrLoad;

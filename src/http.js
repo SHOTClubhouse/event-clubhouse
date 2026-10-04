@@ -22,6 +22,7 @@ export const fail = (status, error, extra = {}) => json({ error, ...extra }, sta
 export async function readJson(request, max = MAX_BODY) {
   const tooBig = () => new HttpError(413, "That is too much to send in one go.");
   const unreadable = () => new HttpError(400, "We could not read that. Refresh the page and try again.");
+  if (!/^application\/json\b/i.test(request.headers.get("Content-Type") || "")) throw new HttpError(415, "Send the details as JSON.");
   if (Number(request.headers.get("Content-Length")) > max) throw tooBig();
   const chunks = [];
   let size = 0;
@@ -46,13 +47,13 @@ export async function readJson(request, max = MAX_BODY) {
 
 export const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
+  "script-src 'self' https://cdnjs.cloudflare.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://shotclubhouse.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: https:",
   "media-src 'self' blob: https:",
   "connect-src 'self' https:",
-  "frame-src https://www.youtube-nocookie.com https://player.twitch.tv",
+  "frame-src 'self' https://www.youtube-nocookie.com https://player.twitch.tv",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -65,6 +66,7 @@ export function secureHtml(res, { noindex = false } = {}) {
   out.headers.set("X-Content-Type-Options", "nosniff");
   out.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   out.headers.set("Content-Security-Policy", CSP);
+  out.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
   if (noindex) out.headers.set("X-Robots-Tag", "noindex");
   return out;
 }

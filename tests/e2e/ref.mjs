@@ -182,14 +182,9 @@ try {
   const mineCount = await ref.locator(".ecr-game, .ecr-mini").count();
   ok(allCount > mineCount, "All games shows more than My games", `${allCount} v ${mineCount}`);
   // stream
-  await ref.fill("#ecr-stream-url", "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
-  ok(/YouTube/.test(await ref.locator("#ecr-stream-verdict").innerText()), "stream verdict recognises YouTube");
-  await ref.locator("[data-act=stream][data-on=true]").tap();
-  await saved(ref);
-  const pit = (await pub("futsal-finals")).pitches.find((p) => p.id === "P1");
-  ok(pit.stream.on === true && /dQw4/.test(pit.stream.url), "stream saved on my pitch and switched on", JSON.stringify(pit.stream));
-  await ref.locator("[data-act=stream][data-on=false]").tap();
-  await saved(ref);
+  // A public demo explains the stream box rather than taking a link (anyone has this code).
+  ok(/link is fixed/.test(await ref.locator("[data-demo-stream]").innerText()), "public demo explains the stream link");
+  ok((await ref.locator("#ecr-stream-url").count()) === 0, "public demo has no stream link box");
   await ref.evaluate(() => window.scrollTo(0, 0));
   await ref.screenshot({ path: ".screens/ref/06-football-top.png" });
   ok((await overflow(ref)) <= 0, "no overflow after filters and stream");

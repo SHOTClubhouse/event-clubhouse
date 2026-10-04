@@ -38,6 +38,7 @@ export function demoStatements({ id, slug, doc, votes, codes, listed, now }) {
     params: [id, slug, listed ? 1 : 0, JSON.stringify(doc), now, now],
   }];
   out.push({ sql: "DELETE FROM votes WHERE event_id = ?", params: [id] });
+  out.push({ sql: "DELETE FROM registrations WHERE event_id = ?", params: [id] });
   out.push(...insertVoteStatements(id, votes));
   if (codes) {
     out.push({ sql: "DELETE FROM codes WHERE event_id = ?", params: [id] });

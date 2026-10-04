@@ -88,7 +88,8 @@ await step("a wrong code gives the plain-English 401", async () => {
   ok(r, 401);
   assert.equal(r.data.error, "That code didn't work. Check it and try again.");
   assert.equal((await call("POST", "/api/auth", { body: { code: 42 } })).status, 401);
-  assert.equal((await call("POST", "/api/auth", { body: "nope", raw: true })).status, 400);
+  assert.equal((await call("POST", "/api/auth", { body: "nope", raw: true, headers: { "Content-Type": "application/json" } })).status, 400);
+  assert.equal((await call("POST", "/api/auth", { body: "{}", raw: true, headers: { "Content-Type": "text/plain" } })).status, 415);
 });
 
 await step("every demo role signs in and sees the right view", async () => {
@@ -368,7 +369,7 @@ await step("boxing: a bout runs, the judge sees their own card early, the public
 
 // ---------------------------------------------------------------- registration
 
-await step("registration: ok, duplicate says already, bad input is refused, only admin can read it", async () => {
+await step("registration: ok, duplicate gives the same answer, bad input is refused, only admin can read it", async () => {
   const reg = (body) => call("POST", `/api/events/${S.slug}/register`, { body });
   const good = { firstName: "Sam", email: "Sam.E2E@Example.com", over13: true, consent: true };
   const first = await reg(good);
@@ -376,7 +377,7 @@ await step("registration: ok, duplicate says already, bad input is refused, only
   assert.deepEqual(first.data, { ok: true });
   const dup = await reg({ ...good, email: "sam.e2e@example.com" });
   ok(dup);
-  assert.deepEqual(dup.data, { ok: true, already: true });
+  assert.deepEqual(dup.data, { ok: true });
   ok(await reg({ ...good, email: "not-an-email" }), 400);
   ok(await reg({ ...good, email: "a@b" }), 400);
   ok(await reg({ ...good, firstName: "" }), 400);
@@ -389,7 +390,7 @@ await step("registration: ok, duplicate says already, bad input is refused, only
   ok(list);
   assert.equal(list.data.count, 1);
   assert.equal(list.data.rows[0].email, "sam.e2e@example.com");
-  assert.equal(list.data.rows[0].consent, `E2E Organiser ${stamp} and SHOT Clubhouse can email me about E2E Cup ${stamp}, future events and the clubhouse. I can unsubscribe at any time.`);
+  assert.equal(list.data.rows[0].consent, `E2E Cup ${stamp} and SHOT Clubhouse can email me about E2E Cup ${stamp}, future events and the clubhouse. I can unsubscribe at any time.`);
   const csv = await call("GET", `/api/events/${S.slug}/registrations?format=csv`, { token: S.admin });
   ok(csv);
   assert.match(csv.headers.get("Content-Type"), /text\/csv/);
@@ -499,6 +500,23 @@ await step("demo events: codes cannot be revoked, reset works for demo admins on
   assert.equal(after.data.event.name, "Futsal Finals");
   assert.ok(after.data.rev > before);
   ok(await call("GET", "/api/events/futsal-finals/full", { token: S.futsalAdmin }));
+});
+
+await step("demo events keep no registrations and can't take links, video, logos or new codes", async () => {
+  const r = await call("POST", "/api/events/futsal-finals/register", { body: { firstName: "Demo", email: `demo-${stamp}@example.com`, over13: true, consent: true } });
+  ok(r);
+  assert.deepEqual(r.data, { ok: true, demo: true });
+  ok(await call("GET", "/api/events/futsal-finals/registrations", { token: S.futsalAdmin }), 403);
+  ok(await call("POST", "/api/events/futsal-finals/codes", { token: S.futsalAdmin, body: { role: "admin" } }), 403);
+  ok(await call("POST", "/api/events/futsal-finals/ops", { token: S.futsalAdmin, body: { ops: [{ op: "stream.set", url: "https://example.com/x.m3u8", on: true }] } }), 403);
+  ok(await call("POST", "/api/events/futsal-finals/ops", { token: S.futsalAdmin, body: { ops: [{ op: "update.add", title: "Hi", link: "https://example.com" }] } }), 403);
+  ok(await call("POST", "/api/events/futsal-finals/ops", { token: S.futsalAdmin, body: { ops: [{ op: "event.set", theme: { logo: "https://example.com/l.png" } }] } }), 403);
+  const full = await call("GET", "/api/events/futsal-finals/full", { token: S.futsalAdmin });
+  ok(await call("PUT", "/api/events/futsal-finals/doc", { token: S.futsalAdmin, body: { doc: full.data.event, rev: full.data.rev } }), 403);
+  ok(await call("POST", "/api/events/futsal-finals/ops", { token: S.futsalAdmin, body: { ops: [{ op: "bout.add", id: "__proto__", red: { name: "R" }, blue: { name: "B" } }] } }), 400);
+  const own = await call("POST", `/api/events/${S.slug}/ops`, { token: S.admin, body: { ops: [{ op: "stream.set", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", on: true }] } });
+  ok(own);
+  assert.equal(own.data.event.stream.on, true, "a real event still takes a stream link");
 });
 
 await step("the sixes demo has a player-of-the-night leaderboard and updates", async () => {

@@ -261,6 +261,9 @@ export function registerCard(S, o = {}) {
   const ev = S.event, r = S.reg || {};
   const title = o.title || "Join the clubhouse";
   const lede = o.lede || "Get the line-ups, any changes and what comes next, first.";
+  if (r.state === "demo") {
+    return `<section class="ece-card ece-reg ece-reg--done" aria-live="polite"><h2 class="ece-h">That's how fans sign up</h2><p>This is a demo, so we haven't kept your details. On a real event, the organiser gets a list of everyone who registered.</p></section>`;
+  }
   if (r.state === "ok" || r.state === "already") {
     return `<section class="ece-card ece-reg ece-reg--done" aria-live="polite"><h2 class="ece-h">${r.state === "already" ? "You're already on the list" : "You're in"}</h2><p>${r.state === "already" ? "We've got that email already, so there's nothing more to do. We'll keep you posted." : "Thanks. We'll email you about " + esc(ev.name) + " and what comes next."}</p></section>`;
   }

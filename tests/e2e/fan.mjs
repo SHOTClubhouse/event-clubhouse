@@ -67,13 +67,13 @@ await step("futsal (pre): register works, then shows the success state", async (
   await p.check("input[name=consent]");
   await p.click("form[data-reg] button[type=submit]");
   await p.waitForSelector(".ece-reg--done");
-  ok((await p.textContent(".ece-reg--done")).includes("You're in"), "success copy");
+  ok((await p.textContent(".ece-reg--done")).includes("haven't kept your details"), "demo copy says nothing was kept");
   await p.screenshot({ path: ".screens/fan/futsal-registered.png" });
   await p.reload();
   await p.waitForSelector(".ece-reg--done");
   await p.close();
 });
-await step("futsal (pre): a duplicate shows the friendly already-registered success", async () => {
+await step("futsal (pre): registering again gives the same demo answer", async () => {
   const p = await page();
   await p.goto(`${BASE}/e/futsal-finals/`);
   await p.waitForSelector("form[data-reg]");
@@ -83,7 +83,7 @@ await step("futsal (pre): a duplicate shows the friendly already-registered succ
   await p.check("input[name=consent]");
   await p.click("form[data-reg] button[type=submit]");
   await p.waitForSelector(".ece-reg--done");
-  ok((await p.textContent(".ece-reg--done")).includes("already on the list"), "already copy");
+  ok((await p.textContent(".ece-reg--done")).includes("haven't kept your details"), "same demo answer");
   await p.close();
 });
 await step("futsal (pre): a bad email gives a specific error and keeps what was typed", async () => {

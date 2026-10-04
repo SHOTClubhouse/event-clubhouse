@@ -326,3 +326,38 @@ test("the consent sentence names the partner, or the event when there isn't one"
 });
 
 test("time helpers wrap midnight", () => { assert.equal(addMins("23:55", 10), "00:05"); });
+
+test("ids that are JavaScript prototype keys are refused and never pollute objects", () => {
+  const d = blankEvent({ slug: "fight-night", name: "Fight Night", sport: "boxing", date: "2026-10-10" });
+  const admin = { role: "admin", id: null };
+  const add = (id) => ({ op: "bout.add", id, red: { name: "Red" }, blue: { name: "Blue" } });
+  for (const id of ["__proto__", "constructor", "prototype"]) {
+    const r = applyOps(d, [add(id), { op: "score.round", bout: id, judge: "J1", round: 1, red: 10, blue: 9 }], admin);
+    assert.equal(r.ok, false, id);
+  }
+  assert.equal({}.J1, undefined);
+  assert.equal(Object.prototype["1"], undefined);
+  const bad = { ...d, divisions: [{ id: "constructor", name: "X", format: "league", teams: [] }] };
+  assert.ok(validate(bad).length > 0);
+  const ref = { ...d, fixtures: [{ id: "X1", division: "constructor", time: "10:00", home: "A", away: "B", state: "scheduled", homeScore: null, awayScore: null }] };
+  assert.doesNotThrow(() => validate(ref));
+  assert.ok(validate(ref).length > 0);
+});
+
+test("validate reports malformed data instead of throwing", () => {
+  const d = blankEvent({ slug: "x-cup", name: "X Cup" });
+  for (const k of ["pitches", "officials", "divisions", "fixtures", "updates"]) {
+    const bad = { ...d, [k]: [null] };
+    assert.doesNotThrow(() => validate(bad), k);
+    assert.ok(validate(bad).length > 0, k);
+  }
+});
+
+test("team ids are unique across divisions, so a coach code can only ever mean one team", () => {
+  const d = blankEvent({ slug: "x-cup", name: "X Cup" });
+  d.divisions = [
+    { id: "D1", name: "Men", format: "league", teams: [{ id: "T1", name: "A", players: [] }] },
+    { id: "D2", name: "Women", format: "league", teams: [{ id: "T1", name: "B", players: [] }] },
+  ];
+  assert.ok(validate(d).some((e) => /team T1/.test(e)));
+});

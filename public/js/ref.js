@@ -34,13 +34,14 @@ function ctx() {
   const event = Q.derive(S.server, Q.load(slug), actor());
   const off = (event.officials || []).find((o) => o.id === S.sess.subject);
   const me = { id: S.sess.subject, name: off ? off.name : S.sess.label, role: S.sess.role, pitch: off ? off.pitch ?? null : null };
-  return { event, me, judging: S.judging, ui: S.ui, slug, sess: S.sess, send, sendNow, toast, rerender: render };
+  return { event, me, judging: S.judging, publicDemo: !!S.publicDemo, ui: S.ui, slug, sess: S.sess, send, sendNow, toast, rerender: render };
 }
 
 // ---------------------------------------------------------------- sending
 function applyServer(r) {
   if (!r || !r.event || r.rev < S.rev) return;
   S.server = r.event; S.rev = r.rev; S.fromCache = false; if (r.judging) S.judging = r.judging; S.loadError = "";
+  if (typeof r.publicDemo === "boolean") S.publicDemo = r.publicDemo;
   try { localStorage.setItem(CACHE, JSON.stringify({ rev: r.rev, event: r.event })); } catch (e) { /* too big or private mode: fine */ }
   applyTheme(r.event);
   document.title = `${r.event.name} | Referee | SHOT Event Clubhouse`;

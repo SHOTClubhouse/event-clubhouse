@@ -9,7 +9,7 @@
 // rejected so a half-applied save never reaches fans. The resulting document must pass
 // validate().
 
-import { validate, newId, STATES, PHASES, VOTE_BY, METHODS, mustScore } from "./model.js";
+import { validate, newId, ID, STATES, PHASES, VOTE_BY, METHODS, mustScore } from "./model.js";
 import { nextState, decision, cardsComplete } from "./boxing.js";
 
 const ADMIN = ["admin"];
@@ -91,8 +91,9 @@ export const OPS = {
       if (!ended) return "Score the round once it has ended.";
       if (b.state === "done" && b.result) return "This bout is decided. Ask the organiser to change a card.";
     }
-    d.scorecards[b.id] = d.scorecards[b.id] || {};
-    d.scorecards[b.id][judge] = d.scorecards[b.id][judge] || {};
+    if (!ID.test(b.id) || !ID.test(judge)) return "Unknown bout.";
+    if (!Object.hasOwn(d.scorecards, b.id)) d.scorecards[b.id] = {};
+    if (!Object.hasOwn(d.scorecards[b.id], judge)) d.scorecards[b.id][judge] = {};
     d.scorecards[b.id][judge][o.round] = [o.red, o.blue];
   } },
 
@@ -182,12 +183,27 @@ export const OPS = {
 // Ops a role may send at all (for the dashboards to show or hide controls).
 export const allowed = (role) => Object.keys(OPS).filter((k) => OPS[k].roles.includes(role));
 
+// Every id an op names must be a valid id, checked before the op runs, because ids become object
+// keys (scorecards) and "__proto__" there would reach every object in the process.
+const ID_KEYS = ["id", "division", "judge", "team", "pitch", "ref", "home", "away"];
+const RESERVED = /^(__proto__|constructor|prototype)$/;
+const bad = (v) => typeof v === "string" && RESERVED.test(v);
+const plain = (x) => !!x && typeof x === "object" && ID_KEYS.every((k) => !bad(x[k]));
+function keysSafe(o) {
+  if (!plain(o)) return false;
+  if (o.fixture != null && !plain(o.fixture)) return false;
+  if (Array.isArray(o.fixtures) && !o.fixtures.every(plain)) return false;
+  if (Array.isArray(o.judges) && o.judges.some(bad)) return false;
+  return true;
+}
+
 export function applyOps(doc, ops, actor, now = Date.now()) {
   if (!Array.isArray(ops) || !ops.length) return { ok: false, status: 400, error: "Nothing to save." };
   if (ops.length > 200) return { ok: false, status: 400, error: "Too many changes in one save." };
   const d = JSON.parse(JSON.stringify(doc));
   for (let i = 0; i < ops.length; i++) {
     const o = ops[i] || {};
+    if (!keysSafe(o)) return { ok: false, status: 400, error: "That id isn't allowed.", index: i };
     const def = OPS[o.op];
     if (!def) return { ok: false, status: 400, error: `Unknown change "${o.op}".`, index: i };
     if (!actor || !def.roles.includes(actor.role)) return { ok: false, status: 403, error: "You don't have permission to do that.", index: i };

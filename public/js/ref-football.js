@@ -138,6 +138,12 @@ function streamPanel(c) {
   const label = d[`stream:${target}:label`] ?? now.label ?? "";
   const where = target ? pitchName(event, target) : "the event";
   const dirty = url !== (now.url ?? "") || label !== (now.label ?? "");
+  if (c.publicDemo) {
+    return `<section class="ec-card ecr-stream" aria-labelledby="ecr-stream-h">
+    <h2 id="ecr-stream-h" class="ecr-h">Live stream for ${esc(where)}</h2>
+    <p class="ec-help" data-demo-stream>On your own event, you paste the stream link here (YouTube, Twitch, Veo or a video link) and switch it on when you're live. Fans watch it on the event page. In this public demo the link is fixed.</p>
+  </section>`;
+  }
   return `<section class="ec-card ecr-stream" aria-labelledby="ecr-stream-h">
     <h2 id="ecr-stream-h" class="ecr-h">Live stream for ${esc(where)}</h2>
     <div class="ec-field"><label for="ecr-stream-url">Stream link</label>

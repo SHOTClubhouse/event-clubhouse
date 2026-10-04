@@ -18,6 +18,7 @@ api.get = async (path, opts) => { const r = await rawGet(path, opts); if (typeof
 function loadQr() {
   const sc = document.createElement("script");
   sc.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js";
+  sc.integrity = "sha384-mZT2gIty7ZDdOGkxfP6joZcYdMW1Jvj9dRlfpTmaJAKKXTqzygtB22k7FLe+KZC1"; sc.crossOrigin = "anonymous";
   sc.onload = () => {
     try { const q = window.qrcode(0, "M"); q.addData(S.fanUrl); q.make(); S.qr = q.createSvgTag({ scalable: true, margin: 0 }); lastHtml = ""; paintFooter(); refresh(true); } catch (e) { /* the URL text still shows */ }
   };
