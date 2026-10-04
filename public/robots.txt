@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /ref/
+Disallow: /coach/
+Disallow: /api/
+
+Sitemap: https://events.shotclubhouse.com/sitemap.xml

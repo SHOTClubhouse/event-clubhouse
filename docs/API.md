@@ -132,8 +132,41 @@ Admin of a **demo** event only (403 otherwise): puts the demo back to its seed.
 
 ## Demo events
 
-Seeded by `scripts/seed.js` from `src/seeds/*.js`. Each demo event has published demo codes
-(listed on `/demo/`) for every role. A cron trigger keeps one football and one boxing demo
-"always live": it plays games and rounds forward, adds goals and fan votes, and resets them when
-they finish, so a prospect opening the demo at any time sees a live day. Demo events also reset
-nightly.
+Seeded by `scripts/seed.js` from `src/seeds/*.js`: `beach-soccer-cup` (football, live),
+`futsal-finals` (football, before the day), `sixes-league-night` (football, after the day) and
+`fight-night` (boxing, live). Each has published demo codes for every role. A cron trigger keeps
+the beach soccer cup and the fight night "always live": it plays games and rounds forward, adds
+goals and fan votes, and resets them when they finish, so a prospect opening the demo at any time
+sees a live day. Every demo also resets nightly at 04:00 London time. Demo codes cannot be revoked
+(403); `POST /api/events/:slug/reset` puts a demo back.
+
+### GET /api/demo
+`{ events: [{ slug, name, sport, phase, live, blurb, codes: [{ role, label, code }] }] }`, in the
+order beach soccer cup, futsal finals, sixes league night, fight night. Only seeded, listed demo
+events appear. `live` is true for the two simulated demos and for any demo in phase `live`. The
+plain codes are public on purpose (they only open demo events).
+
+## Additions and details beyond the contract above
+
+- **New events are unlisted.** `POST /api/events` creates the event with `listed = 0`, so it is
+  reached by its link only (and carries `X-Robots-Tag: noindex`) until SHOT lists it:
+  `POST /api/shot/events/:slug/listing` with header `X-Shot-Admin` and `{ "listed": true }` →
+  `{ ok: true, listed }`.
+- **Sign-in limit** counts failed attempts only (10 per connection per 10 minutes), so a venue
+  full of referees behind one Wi-Fi address can all sign in. Organiser sign-in and the SHOT admin
+  header share the same limit. Registration is limited to 10 attempts a minute per connection
+  and votes to 60 new votes a minute.
+- **Ops errors** carry `index` (the position of the op that was refused). A batch is all or
+  nothing.
+- **`POST /ops`** answers `{ ok: true, ...<the /full body for that role> }`.
+- **Body limits:** 256 KB for every request, 1 MB for `PUT /doc`. Over the limit is 413.
+- **`PUT /doc`** keeps the server's own `private` section (demo and simulation bookkeeping),
+  which never appears in any response.
+- **`GET /api/events/:slug`** and `/full` answer 204 when `?rev=` equals the current rev;
+  `/full` still needs a valid token first.
+- **Registrations CSV** guards against spreadsheet formulas (a leading `=`, `+`, `-` or `@` is
+  prefixed with an apostrophe).
+- **Pages:** `/e/<slug>` redirects to `/e/<slug>/`. Any other path under `/e/<slug>/` serves the
+  fan app, except `/e/<slug>/screen/...` which serves the big screen. An unknown slug is a 404
+  page. Pages get `X-Content-Type-Options`, `Referrer-Policy` and a Content-Security-Policy from
+  the Worker (the Worker runs first for HTML pages, see `run_worker_first` in `wrangler.toml`).

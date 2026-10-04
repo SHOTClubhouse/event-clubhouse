@@ -1,0 +1,15 @@
+[
+  {
+    "name": "Example Street Football Series",
+    "partner": "Example Partner",
+    "accent": "#1abc9c",
+    "seed": "beach-soccer-cup"
+  },
+  {
+    "name": "Example Fight Series",
+    "partner": "Example Promotions",
+    "accent": "#f7b613",
+    "seed": "fight-night",
+    "logo": "https://example.com/logo.png"
+  }
+]

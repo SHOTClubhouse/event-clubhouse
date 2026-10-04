@@ -9,7 +9,9 @@ workers_dev = true
 directory = "./public"
 binding = "ASSETS"
 not_found_handling = "404-page"
-run_worker_first = ["/api/*", "/e/*", "/p/*"]
+# HTML pages go through the Worker too, so they get the security headers. Scripts, styles and
+# images are served straight from the assets.
+run_worker_first = ["/api/*", "/e/*", "/p/*", "/", "/demo", "/demo/*", "/admin", "/admin/*", "/ref", "/ref/*", "/coach", "/coach/*", "/event/*", "/screen/*"]
 
 [[d1_databases]]
 binding = "DB"
@@ -18,6 +20,11 @@ database_id = "a4e5f865-7bc1-4d17-8e4c-a6d86d0f6af1"
 
 [vars]
 SITE = "https://events.shotclubhouse.com"
+
+# The demo simulation runs once a minute and takes SIM_TICKS steps SIM_TICK_MS apart inside it
+# (defaults 3 and 20000), so a watcher sees something move every 20 seconds or so.
+[triggers]
+crons = ["* * * * *"]
 
 # Secrets (set with `wrangler secret put NAME`, never committed):
 #   SECRET        signs session tokens and peppers code hashes
