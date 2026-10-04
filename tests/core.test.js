@@ -153,6 +153,15 @@ test("rest is enforced even when it leaves a slot empty: 4 teams, 2 pitches", ()
   assert.deepEqual([...new Set(tight.fixtures.map((f) => f.time))], ["10:00", "10:10", "10:20"]);
 });
 
+test("no wasted slots: 8 teams, 2 groups, 2 pitches, rest 1 fits the 12 group games into 6 slots", () => {
+  const g = generate({ teams: teams(8), format: "groups-knockout", groups: 2, advance: 2, start: "10:00", gameMins: 10, gapMins: 2, pitches: ["P1", "P2"], minRest: 1 });
+  assert.ok(g.ok);
+  scheduleChecks(g.fixtures, 1, 12, "10:00");
+  const times = [...new Set(g.fixtures.filter((f) => !f.stage).map((f) => f.time))];
+  assert.equal(times.length, 6, `group stage used ${times.join(", ")}`);
+  assert.equal(times.sort().at(-1), "11:00", `gaps in the group stage: ${times.join(", ")}`);
+});
+
 test("league, double round robin and straight knockout all generate", () => {
   const l = generate({ teams: teams(5), format: "league", legs: 2, start: "09:00", gameMins: 12, gapMins: 3, pitches: ["P1"], minRest: 0 });
   assert.ok(l.ok);

@@ -142,7 +142,6 @@ export function generate(o) {
   }
 
   const fixtures = [];
-  const last = {}; // team -> last slot played
   let n = 0;
   const id = () => `${prefix}${String(++n).padStart(2, "0")}`;
   const timeOf = (slot) => addMins(o.start, slot * slotMins);
@@ -152,26 +151,41 @@ export function generate(o) {
     if ((o.refMode || "pitch") === "pitch" && refs.length >= pitches.length) return refs[pitchIndex % refs.length];
     return refs[refTurn++ % refs.length];
   };
-  const rested = (t, slot) => last[t] === undefined || slot - last[t] - 1 >= minRest;
 
-  let slot = 0, lastGroup = null;
-  const pending = queue.slice();
-  while (pending.length && slot < 5000) {
-    const busy = new Set();
-    for (let p = 0; p < pitches.length; p++) {
-      const ok = pending.filter((m) => !busy.has(m.home) && !busy.has(m.away) && rested(m.home, slot) && rested(m.away, slot));
-      if (!ok.length) break;
-      const wait = (m) => Math.min(last[m.home] ?? -99, last[m.away] ?? -99);
-      ok.sort((a, b) => a.round - b.round || (a.group === lastGroup) - (b.group === lastGroup) || wait(a) - wait(b) || pending.indexOf(a) - pending.indexOf(b));
-      const m = ok[0];
-      pending.splice(pending.indexOf(m), 1);
-      busy.add(m.home); busy.add(m.away);
-      last[m.home] = last[m.away] = slot;
-      lastGroup = m.group;
-      fixtures.push({ id: id(), division, time: timeOf(slot), pitch: pitches[p], ref: refFor(p), home: m.home, away: m.away, homeScore: null, awayScore: null, state: "scheduled" });
+  // Greedy slot filling under one priority rule. Different rules suit different shapes of day:
+  // alternating groups gives a one-pitch day its A, B, A, B rhythm; keeping a group together on
+  // several pitches avoids dead slots when rest is tight. Every rule is tried and the earliest
+  // finish wins (ties go to the first rule, so alternation is kept when it costs nothing).
+  const place = (rule) => {
+    const last = {}; // team -> last slot played
+    const rested = (t, slot) => last[t] === undefined || slot - last[t] - 1 >= minRest;
+    const out = [];
+    let slot = 0, lastGroup = null;
+    const pending = queue.slice();
+    while (pending.length && slot < 5000) {
+      const busy = new Set();
+      for (let p = 0; p < pitches.length; p++) {
+        const ok = pending.filter((m) => !busy.has(m.home) && !busy.has(m.away) && rested(m.home, slot) && rested(m.away, slot));
+        if (!ok.length) break;
+        const wait = (m) => Math.min(last[m.home] ?? -99, last[m.away] ?? -99);
+        const same = (m) => (m.group === lastGroup ? 1 : 0);
+        ok.sort((x, y) => (rule === "rested" ? 0 : x.round - y.round)
+          || (rule === "alternate" ? same(x) - same(y) : rule === "together" ? same(y) - same(x) : 0)
+          || wait(x) - wait(y) || pending.indexOf(x) - pending.indexOf(y));
+        const m = ok[0];
+        pending.splice(pending.indexOf(m), 1);
+        busy.add(m.home); busy.add(m.away);
+        last[m.home] = last[m.away] = slot;
+        lastGroup = m.group;
+        out.push({ slot, p, m });
+      }
+      slot++;
     }
-    slot++;
-  }
+    return { out, slots: slot };
+  };
+  const best = ["alternate", "together", "rested"].map(place).reduce((x, y) => (y.slots < x.slots ? y : x));
+  best.out.forEach(({ slot, p, m }) => fixtures.push({ id: id(), division, time: timeOf(slot), pitch: pitches[p], ref: refFor(p), home: m.home, away: m.away, homeScore: null, awayScore: null, state: "scheduled" }));
+  const slot = best.slots;
   // Knockouts: each round starts once the round before is over and its teams have rested.
   let qualifiers = null;
   if (o.format === "knockout") qualifiers = teams.map((t) => t.id);
