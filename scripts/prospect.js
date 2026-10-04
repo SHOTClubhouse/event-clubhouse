@@ -36,6 +36,7 @@ list.forEach((p, i) => {
   if (!COLOUR.test(p.accent || "")) problems.push(`${at}: accent is a #rrggbb colour`);
   if (p.seed != null && !SEEDS[p.seed]) problems.push(`${at}: seed is one of ${Object.keys(SEEDS).join(", ")}`);
   if (p.logo != null && !(typeof p.logo === "string" && HTTPS.test(p.logo))) problems.push(`${at}: logo is an https link`);
+  if (p.teams != null && !(Array.isArray(p.teams) && p.teams.every((t) => typeof t === "string" && t.trim() && t.length <= 40))) problems.push(`${at}: teams is a list of names, 40 characters or fewer`);
 });
 if (problems.length) { console.error(problems.join("\n")); process.exit(1); }
 
@@ -45,7 +46,7 @@ const report = [];
 for (const p of list) {
   const seedKey = p.seed || "beach-soccer-cup";
   const slug = `p-${randomSlugPart(10)}`;
-  const { seed, doc, votes } = buildDemo(seedKey, now, { slug, name: p.name.trim(), partner: p.partner || null, accent: p.accent, logo: p.logo || null });
+  const { seed, doc, votes } = buildDemo(seedKey, now, { slug, name: p.name.trim(), partner: p.partner || null, accent: p.accent, logo: p.logo || null, teams: Array.isArray(p.teams) ? p.teams : null });
   const id = `prospect-${slug}`;
   const codes = [];
   const shown = [];

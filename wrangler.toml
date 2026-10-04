@@ -4,6 +4,7 @@ name = "event-clubhouse"
 main = "src/worker.js"
 compatibility_date = "2026-09-01"
 workers_dev = true
+routes = [{ pattern = "events.shotclubhouse.com", custom_domain = true }]
 
 [assets]
 directory = "./public"

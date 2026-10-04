@@ -11,7 +11,7 @@ import fight from "./fight-night.js";
 export const SEEDS = Object.fromEntries([beach, futsal, sixes, fight].map((s) => [s.slug, s]));
 export const SEED_ORDER = [beach.slug, futsal.slug, sixes.slug, fight.slug];
 
-// A prospect or demo event from a seed. overrides: { slug, name, partner, accent, logo }.
+// A prospect or demo event from a seed. overrides: { slug, name, partner, accent, logo, teams }.
 export function buildDemo(key, now, overrides = null) {
   const seed = SEEDS[key];
   if (!seed) throw new Error(`No demo seed called ${key}`);
@@ -22,6 +22,7 @@ export function buildDemo(key, now, overrides = null) {
     if (overrides.accent) doc.theme.accent = overrides.accent;
     if (overrides.partner) doc.theme.partner = overrides.partner;
     if (overrides.logo) doc.theme.logo = overrides.logo;
+    if (Array.isArray(overrides.teams)) doc.divisions.flatMap((v) => v.teams).forEach((t, i) => { if (overrides.teams[i]) t.name = String(overrides.teams[i]).trim(); });
     doc.private = { demo: { seed: key, overrides } };
   }
   return { seed, doc: check(doc), votes: seed.votes(doc, now) };
