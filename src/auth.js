@@ -28,6 +28,18 @@ export async function verifyToken(secret, token, now = Date.now()) {
 export const hashCode = (secret, code) => sha256Hex(`${secret}:${code}`);
 
 // A connection, as a daily-rotating hash, so nobody's address is stored.
+// The part of an address that identifies one connection for rate limits: the whole IPv4
+// address, or the /64 network for IPv6 (one home or phone gets a whole /64 and can rotate
+// through it).
+export function connectionKey(ip) {
+  if (typeof ip !== "string" || !ip.includes(":")) return ip;
+  const [head, tail] = ip.toLowerCase().split("::");
+  const h = head ? head.split(":") : [];
+  const t = tail ? tail.split(":") : [];
+  const full = tail === undefined ? h : [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t];
+  return `${full.slice(0, 4).map((x) => x.replace(/^0+(?=.)/, "")).join(":")}::/64`;
+}
+
 export const ipHash = (secret, ip, now = Date.now()) => sha256Hex(secret + ip + new Date(now).toISOString().slice(0, 10));
 
 export const bearer = (request) => {

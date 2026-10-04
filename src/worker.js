@@ -6,7 +6,7 @@ import { blankEvent, validate, publicView, consentText, SPORTS, SLUG, DATE } fro
 import { applyOps } from "../public/core/ops.js";
 import { checkVote } from "../public/core/votes.js";
 import { HttpError, json, fail, noContent, readJson, MAX_DOC_BODY, secureHtml, isHtml, notFoundPage } from "./http.js";
-import { signToken, verifyToken, hashCode, ipHash, bearer, overLimit, noteAttempt, pruneAttempts, TOKEN_TTL } from "./auth.js";
+import { signToken, verifyToken, hashCode, ipHash, connectionKey, bearer, overLimit, noteAttempt, pruneAttempts, TOKEN_TTL } from "./auth.js";
 import { normaliseCode, formatCode, randomCode, randomId, randomSlugPart, slugify, safeEqual, londonParts } from "./util.js";
 import { loadEvent, currentRev, mutateEvent } from "./events.js";
 import { roleView } from "./views.js";
@@ -23,7 +23,7 @@ const secret = (env) => { if (!env.SECRET) throw new HttpError(500, "This server
 const text = (v, max) => (typeof v === "string" && v.trim().length > 0 && v.trim().length <= max ? v.trim() : null);
 
 async function connection(request, env, now) {
-  return ipHash(secret(env), request.headers.get("CF-Connecting-IP") || "local", now);
+  return ipHash(secret(env), connectionKey(request.headers.get("CF-Connecting-IP") || "local"), now);
 }
 
 // ---------------------------------------------------------------- auth helpers
@@ -101,7 +101,8 @@ async function votesPost(env, request, row, now) {
   if (checked.drop) return json({ ok: true });
   const ip = await connection(request, env, now);
   const v = checked.vote;
-  if (!(await existingVote(env.DB, row.id, v.voter, v.target)) && (await recentNewVotes(env.DB, ip, now - 60000)) >= 60) {
+  if (!(await existingVote(env.DB, row.id, v.voter, v.target)) && (await recentNewVotes(env.DB, ip, now - 60000)) >= 600) {
+    // A whole crowd can share one address (venue Wi-Fi, mobile networks), so the cap is high.
     return fail(429, "That's a lot of votes from one connection. Wait a minute and try again.");
   }
   await upsertVote(env.DB, row.id, v, ip, now).run();

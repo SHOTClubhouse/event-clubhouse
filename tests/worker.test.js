@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { signToken, verifyToken, hashCode, ipHash, TOKEN_TTL } from "../src/auth.js";
+import { signToken, verifyToken, hashCode, ipHash, connectionKey, TOKEN_TTL } from "../src/auth.js";
 import { normaliseCode, formatCode, randomCode, slugify, safeEqual, CODE_ALPHABET, londonParts, addDays } from "../src/util.js";
 import { roleView } from "../src/views.js";
 import { readJson, MAX_BODY, CSP } from "../src/http.js";
@@ -435,4 +435,13 @@ test("goal totals: mean about 3.5, never above 8", () => {
   const mean = totals.reduce((a, b) => a + b, 0) / totals.length;
   assert.ok(mean > 3.1 && mean < 3.7, `mean ${mean}`);
   assert.ok(Math.max(...totals) <= 8);
+});
+
+test("rate limits key IPv4 by address and IPv6 by its /64", () => {
+  assert.equal(connectionKey("203.0.113.9"), "203.0.113.9");
+  assert.equal(connectionKey("2001:db8:1:2:aaaa::1"), "2001:db8:1:2::/64");
+  assert.equal(connectionKey("2001:0db8:0001:0002:ffff:ffff:ffff:ffff"), "2001:db8:1:2::/64");
+  assert.equal(connectionKey("2001:db8::1"), "2001:db8:0:0::/64");
+  assert.equal(connectionKey("::1"), "0:0:0:0::/64");
+  assert.equal(connectionKey("local"), "local");
 });
