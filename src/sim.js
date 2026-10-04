@@ -15,7 +15,8 @@
 import { applyOps } from "../public/core/ops.js";
 import { openTargets } from "../public/core/votes.js";
 import { resolve, standings } from "../public/core/standings.js";
-import { REASONS } from "../public/core/model.js";
+import { REASONS, toMins, fromMins } from "../public/core/model.js";
+import { londonParts } from "./util.js";
 
 const ADMIN = { role: "admin", id: null };
 const RESET_WAIT = 5 * 60 * 1000;
@@ -79,14 +80,60 @@ function tieFixes(doc) {
   return ops;
 }
 
-const GOALS = [0, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 6];
+// Small-sided football: about 3.5 goals a game, never more than 8.
+export const MEAN_GOALS = 3.5;
+export const MAX_GOALS = 8;
+function goalTotal(rand) {
+  for (;;) {
+    const limit = Math.exp(-MEAN_GOALS);
+    let k = 0, p = 1;
+    do { k++; p *= rand(); } while (p > limit);
+    if (k - 1 <= MAX_GOALS) return k - 1;
+  }
+}
 
 function planGame(f, now, rand) {
   const dur = between(rand, 170, 240) * 1000;
-  const total = pick(rand, GOALS);
+  const total = goalTotal(rand);
   const lean = 0.35 + rand() * 0.3;
-  const goals = Array.from({ length: total }, () => ({ at: now + Math.round((0.1 + rand() * 0.82) * dur), side: rand() < lean ? "home" : "away" })).sort((a, b) => a.at - b.at);
+  const goals = Array.from({ length: total }, () => ({ at: now + Math.round((0.06 + rand() * 0.88) * dur), side: rand() < lean ? "home" : "away" })).sort((a, b) => a.at - b.at);
   return { cur: f.id, startAt: now, endAt: now + dur, goals, applied: 0 };
+}
+
+// ---- times follow the real London clock ----
+const SLOT = 5; // minutes: a game of 3 to 4 minutes plus the break before the next one
+const rank = (f) => (!f.stage ? 0 : /^(Round|Quarter)/.test(f.stage) ? 1 : /^Semi/.test(f.stage) ? 2 : 3);
+
+// Times for the games still to come, as minutes from now. Only the pitches in `need` are
+// re-timed, and only games whose time actually changes get an edit, so a quiet tick writes nothing.
+function retimeOps(doc, now, need, started, running) {
+  const p = londonParts(now);
+  const nowMin = p.hour * 60 + p.minute;
+  const delta = (hhmm) => { let d = (toMins(hhmm) - nowMin) % 1440; if (d < -720) d += 1440; if (d >= 720) d -= 1440; return d; };
+  const want = {};
+  const startedIds = new Set(started.map((f) => f.id));
+  started.forEach((f) => { want[f.id] = 0; });
+  const todo = [];
+  doc.pitches.filter((x) => need.has(x.id)).forEach((pitch) => {
+    const base = started.some((f) => f.pitch === pitch.id) ? SLOT : running.has(pitch.id) ? 3 : 1;
+    doc.fixtures.filter((f) => f.state === "scheduled" && f.pitch === pitch.id && !startedIds.has(f.id)).forEach((f, k) => { want[f.id] = base + k * SLOT; todo.push(f); });
+  });
+  const at = (f) => (f.id in want ? want[f.id] : delta(f.time));
+  const floor = {};
+  todo.sort((a, b) => rank(a) - rank(b)).forEach((f) => {
+    // a knockout round waits for every earlier round to be played, on any pitch
+    const before = doc.fixtures.filter((g) => rank(g) < rank(f) && g.state !== "ft").map(at);
+    let t = Math.max(want[f.id], floor[f.pitch] ?? -Infinity, before.length ? Math.max(...before) + SLOT : -Infinity);
+    want[f.id] = t;
+    floor[f.pitch] = t + SLOT;
+  });
+  const ops = [];
+  doc.fixtures.forEach((f) => {
+    if (!(f.id in want)) return;
+    const time = fromMins(nowMin + want[f.id]);
+    if (time !== f.time) ops.push({ op: "fixture.edit", id: f.id, time });
+  });
+  return ops;
 }
 
 function football(doc, now, rand, out) {
@@ -111,6 +158,10 @@ function football(doc, now, rand, out) {
 
   const sidesOf = (f) => { const d = divisionOf(doc, f); return [resolve(d, fixtures, f.home, points), resolve(d, fixtures, f.away, points)]; };
   const actorFor = (f) => (f.ref ? { role: "referee", id: f.ref } : ADMIN);
+  const nowParts = londonParts(now);
+  const nowMin = nowParts.hour * 60 + nowParts.minute;
+  const started = [], starts = [], running = new Set(), need = new Set();
+  if (!sim.timed) { sim.timed = true; doc.pitches.forEach((x) => need.add(x.id)); }
 
   doc.pitches.forEach((pitch) => {
     const ps = (sim.pitches[pitch.id] = sim.pitches[pitch.id] || { cur: null, idleUntil: now });
@@ -132,6 +183,7 @@ function football(doc, now, rand, out) {
         progress(out, now);
       }
       if (ops.length) out.batches.push({ actor: actorFor(cur), ops });
+      if (!ending) running.add(pitch.id);
       return;
     }
 
@@ -154,9 +206,23 @@ function football(doc, now, rand, out) {
     if (blocked) return;
 
     sim.pitches[pitch.id] = planGame(next, now, rand);
-    out.batches.push({ actor: actorFor(next), ops: [{ op: "fixture.state", id: next.id, state: "live" }] });
+    started.push(next);
+    need.add(pitch.id);
+    starts.push({ actor: actorFor(next), ops: [{ op: "fixture.state", id: next.id, state: "live" }] });
     progress(out, now);
   });
+
+  // a game that has waited past its time (for example a knockout waiting for teams) is re-timed
+  doc.pitches.forEach((pitch) => {
+    const first = fixtures.find((f) => f.state === "scheduled" && f.pitch === pitch.id && !started.includes(f));
+    if (!first) return;
+    let d = (toMins(first.time) - nowMin) % 1440;
+    if (d < -720) d += 1440;
+    if (d < -1) need.add(pitch.id);
+  });
+  const timing = retimeOps(doc, now, need, started, running);
+  if (timing.length) out.batches.push({ actor: ADMIN, ops: timing });
+  out.batches.push(...starts);
 }
 
 // ---------------------------------------------------------------- boxing

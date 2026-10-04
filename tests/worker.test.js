@@ -367,3 +367,72 @@ test("a knockout place that ties on every tie-break is settled by the organiser,
   const r = runStep(doc, NOW, rng(4));
   assert.deepEqual(r.errors, []);
 });
+
+// ---- the demo follows the real clock, with believable scores ----
+test("football demo times follow London now, scores look like small-sided football, and quiet ticks do not re-time", () => {
+  const rand = rng(31);
+  let doc = buildDemo("beach-soccer-cup", NOW).doc;
+  const wasFt = new Set();
+  const totals = [];
+  let ticks = 0, timingTicks = 0, resets = 0;
+  const minOf = (ms) => { const p = londonParts(ms); return p.hour * 60 + p.minute; };
+  const delta = (hhmm, ms) => { const [h, m] = hhmm.split(":").map(Number); let d = (h * 60 + m - minOf(ms)) % 1440; if (d < -720) d += 1440; if (d >= 720) d -= 1440; return d; };
+  for (let t = NOW; t < NOW + minutes(500); t += 20000) {
+    ticks++;
+    const step = simStep(doc, t, rand);
+    if (step.batches.some((b) => b.ops.some((o) => o.op === "fixture.edit" && o.time))) timingTicks++;
+    const r = runStep(doc, t, rng(t));
+    if (step.reset || r.reset) { resets++; doc = buildDemo("beach-soccer-cup", t).doc; wasFt.clear(); continue; }
+    doc = runStep(doc, t, rng(t)).doc;
+    doc.fixtures.forEach((f) => {
+      const d = delta(f.time, t);
+      if (f.state === "scheduled") assert.ok(d >= -5, `${f.id} scheduled for ${f.time} is ${-d} minutes behind now`);
+      if (f.state === "live") assert.ok(d <= 0 && d >= -6, `${f.id} live game timed ${f.time}, ${-d} minutes from now`);
+      if (f.state === "ft" && !wasFt.has(f.id)) { wasFt.add(f.id); totals.push(f.homeScore + f.awayScore); }
+    });
+  }
+  assert.ok(resets >= 8);
+  assert.ok(totals.length > 100, `games played: ${totals.length}`);
+  const mean = totals.reduce((a, b) => a + b, 0) / totals.length;
+  assert.ok(mean >= 2.5 && mean <= 5, `mean goals ${mean}`);
+  assert.ok(Math.max(...totals) <= 8, `max goals ${Math.max(...totals)}`);
+  assert.ok(Math.min(...totals) <= 1 && Math.max(...totals) >= 6, "a spread of scorelines");
+  assert.ok(timingTicks < ticks / 3, `re-timed on ${timingTicks} of ${ticks} ticks`);
+});
+
+test("a game is timed at the real clock when it starts, and games to come run forward at about five minutes each, knockouts last", () => {
+  const rand = rng(8);
+  const doc = buildDemo("beach-soccer-cup", NOW + minutes(37)).doc; // built 37 minutes later: starts at that time
+  const t = NOW + minutes(37);
+  const hhmm = londonParts(t).hhmm;
+  assert.equal(doc.fixtures[0].time, hhmm, "the seed starts from now");
+  const later = t + minutes(90); // London 14:37 in the summer-time offset
+  const r = runStep(doc, later, rand);
+  assert.deepEqual(r.errors, []);
+  const live = r.doc.fixtures.filter((f) => f.state === "live");
+  assert.equal(live.length, 2);
+  live.forEach((f) => assert.equal(f.time, londonParts(later).hhmm));
+  const toMin = (s) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3));
+  const p1 = r.doc.fixtures.filter((f) => f.pitch === "P1" && f.state === "scheduled");
+  p1.slice(0, 3).forEach((f, i) => assert.equal(toMin(f.time) - toMin(londonParts(later).hhmm), 5 + i * 5));
+  const lastGroup = Math.max(...r.doc.fixtures.filter((f) => !f.stage).map((f) => toMin(f.time)));
+  r.doc.fixtures.filter((f) => f.stage).forEach((f) => assert.ok(toMin(f.time) > lastGroup, `${f.stage} after the groups`));
+  const final = r.doc.fixtures.find((f) => f.stage === "Final");
+  r.doc.fixtures.filter((f) => /^Semi/.test(f.stage || "")).forEach((f) => assert.ok(toMin(f.time) < toMin(final.time)));
+  // nothing changed on the next quiet tick, so nothing is re-timed
+  const quiet = simStep(r.doc, later + 20000, rand);
+  assert.ok(!quiet.batches.some((b) => b.ops.some((o) => o.op === "fixture.edit")));
+});
+
+test("goal totals: mean about 3.5, never above 8", () => {
+  const rand = rng(77);
+  const totals = [];
+  for (let i = 0; i < 4000; i++) {
+    const doc = buildDemo("beach-soccer-cup", NOW).doc;
+    const s = simStep({ ...doc, private: undefined }, NOW + i, rand);
+    totals.push(s.sim.pitches.P1.goals.length);
+  }
+  const mean = totals.reduce((a, b) => a + b, 0) / totals.length;
+  assert.ok(mean > 3.1 && mean < 3.7, `mean ${mean}`);
+  assert.ok(Math.max(...totals) <= 8);
+});

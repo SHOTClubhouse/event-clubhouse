@@ -42,11 +42,11 @@ export function squad(rand, namer, size) {
   return numbers.map((number, i) => ({ id: `p${i + 1}`, number, name: namer() }));
 }
 
-// Start time for a demo that should look like it is happening now: the current London time,
-// to the nearest 5 minutes below, kept early enough that the day does not run past midnight.
+// Start time for a demo that should look like it is happening now: the current London time.
+// (Past midnight the times simply wrap; the nightly reset at 04:00 starts a fresh day.)
 export function startNow(now) {
   const { hour, minute } = londonParts(now);
-  const m = Math.min(hour * 60 + minute - (minute % 5), 21 * 60 + 30);
+  const m = hour * 60 + minute;
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
 
