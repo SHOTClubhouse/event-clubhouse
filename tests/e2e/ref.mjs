@@ -279,15 +279,16 @@ try {
   await endRound(3);
   ok(await R.page.locator("[data-act=bout-next]").isDisabled(), "Next round is off after the last round");
 
-  // points decision refused until all judges are done, then accepted
+  // the referee sees who is still to score, and cannot pick a points decision yet
+  await R.page.waitForFunction(() => /Waiting on/.test(document.querySelector(".ecr-wait")?.textContent || ""), null, { timeout: 15000 });
+  ok(/Dana: round 3/.test(await R.page.locator(".ecr-wait").first().innerText()), "referee sees who is waiting (Dana: round 3)", await R.page.locator(".ecr-wait").first().innerText());
   await R.page.locator("[data-act=result-open]").tap();
   await R.page.locator("[data-act=res-method][data-v=PTS]").tap();
-  await R.page.locator("[data-act=res-confirm]").tap();
-  await R.page.locator("[data-act=res-go]").tap();
-  await R.page.waitForSelector(".ecr-err");
-  ok(/Every judge/.test(await R.page.locator(".ecr-err").innerText()), "points result before cards are complete shows the server's message");
+  ok(await R.page.locator("[data-act=res-confirm]").isDisabled(), "Points decision cannot be recorded until every judge has every round");
+  ok(/Waiting on/.test(await R.page.locator(".ecr-result .ecr-wait").innerText()), "the result sheet says who it is waiting on");
   await R.page.screenshot({ path: ".screens/ref/13-boxing-result-error.png" });
   await judgesScore(3, [[10, 9], [10, 9], [10, 9]]);
+  await R.page.waitForFunction(() => !document.querySelector("[data-act=res-confirm]")?.disabled, null, { timeout: 15000 });
   await R.page.locator("[data-act=res-confirm]").tap();
   await R.page.locator("[data-act=res-go]").tap();
   await R.page.waitForFunction(() => /wins on points/.test(document.querySelector(".ecr-bout__state")?.textContent || ""), null, { timeout: 15000 });
@@ -301,8 +302,18 @@ try {
   const b2row = R.page.locator("[data-act=pick-bout][data-id=B2]");
   await b2row.scrollIntoViewIfNeeded();
   await b2row.tap();
+  // another timekeeper starts the bout while this phone is offline with its own Start queued
+  await R.ctx.setOffline(true);
+  await R.page.evaluate(() => window.dispatchEvent(new Event("offline")));
   await R.page.locator("[data-act=bout-start]").tap();
-  await saved(R.page);
+  await R.page.waitForSelector(".ecr-banner--warn");
+  const other = await api("POST", "/api/events/fight-night/ops", { ops: [{ op: "bout.action", id: "B2", action: "start" }] }, rTok);
+  ok(other.status === 200, "second timekeeper started the bout");
+  await R.ctx.setOffline(false);
+  await R.page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await R.page.waitForFunction(() => !document.querySelector(".ecr-banner--warn") && /On the website/.test(document.querySelector("#ecr-status")?.textContent || ""), null, { timeout: 20000 });
+  ok((await R.page.locator(".ecr-banner--err").count()) === 0, "a queued Start the website already did is dropped quietly, no error");
+  await R.page.waitForSelector(".ecr-clock");
   await R.page.locator("[data-act=result-open]").tap();
   await R.page.locator("[data-act=res-method][data-v=TKO]").tap();
   await R.page.locator("[data-act=res-winner][data-v=blue]").tap();

@@ -298,10 +298,9 @@ app.addEventListener("pointerdown", () => { S.pressing = true; clearTimeout(S.pt
 const s0 = slug ? session(slug, ["coach"]) : null;
 if (s0) {
   S.sess = s0; S.view = "event"; render();
-  S.watcher = watchEvent(slug, (event, rev) => {
+  S.watcher = watchEvent(slug, (event, rev, resp) => {
     if (rev < S.rev) return;
-    S.event = event; S.rev = rev; applyTheme(event); render();
-    pullSquad();
+    applyFull({ event, rev, squad: resp && resp.squad }); render();
   }, {
     path: `/api/events/${encodeURIComponent(slug)}/full`, token: s0.token,
     onError: (e) => {

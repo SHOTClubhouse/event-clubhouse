@@ -34,13 +34,13 @@ function ctx() {
   const event = Q.derive(S.server, Q.load(slug), actor());
   const off = (event.officials || []).find((o) => o.id === S.sess.subject);
   const me = { id: S.sess.subject, name: off ? off.name : S.sess.label, role: S.sess.role, pitch: off ? off.pitch ?? null : null };
-  return { event, me, ui: S.ui, slug, sess: S.sess, send, sendNow, toast, rerender: render };
+  return { event, me, judging: S.judging, ui: S.ui, slug, sess: S.sess, send, sendNow, toast, rerender: render };
 }
 
 // ---------------------------------------------------------------- sending
 function applyServer(r) {
   if (!r || !r.event || r.rev < S.rev) return;
-  S.server = r.event; S.rev = r.rev; S.fromCache = false; S.loadError = "";
+  S.server = r.event; S.rev = r.rev; S.fromCache = false; if (r.judging) S.judging = r.judging; S.loadError = "";
   try { localStorage.setItem(CACHE, JSON.stringify({ rev: r.rev, event: r.event })); } catch (e) { /* too big or private mode: fine */ }
   applyTheme(r.event);
   document.title = `${r.event.name} | Referee | SHOT Event Clubhouse`;
@@ -80,7 +80,7 @@ async function post(ops) {
 const classify = (e) => {
   if (isNet(e)) return "retry";
   if (e.status === 401) return "auth";
-  if (e.status === 429 || e.status >= 500 || /^Lots of people/.test(e.message || "")) return "retry";
+  if (e.status === 429 || e.status >= 500) return "retry";
   return "refused";
 };
 
@@ -92,11 +92,27 @@ function refuse(entry, message) {
   if (S.watcher) S.watcher.refresh();
 }
 
+// A queued boxing action the website has already done (the reply was lost, or another timekeeper
+// got there first) is dropped quietly instead of being sent and refused.
+function alreadyDone(op, event) {
+  if (op.op !== "bout.action" || !event) return false;
+  const b = (event.card.bouts || []).find((x) => x.id === op.id);
+  if (!b) return false;
+  if (op.action === "start") return b.state !== "scheduled";
+  if (op.action === "end-round") return b.roundEnds && b.roundEnds[op.round] != null;
+  if (op.action === "next-round") return b.round > op.round || b.state === "done";
+  if (op.action === "reopen") return b.state !== "done";
+  return false;
+}
+function dropDone() { const gone = Q.load(slug).filter((e) => alreadyDone(e.op, S.server)); if (gone.length) Q.remove(slug, gone.map((e) => e.id)); }
+
 async function run(force) {
   if (!S.sess || !Q.size(slug)) return;
   if (!force && navigator.onLine === false) return;
   S.auth = false; render();
-  while (Q.size(slug)) {
+  // Boxing actions are not safe to resend blindly, so look at the latest event first.
+  if (Q.load(slug).some((e) => e.op.op === "bout.action")) { try { applyServer(await api.get(`/api/events/${encodeURIComponent(slug)}/full`, { token: S.sess.token })); } catch (e) { /* offline: the send below fails the same way */ } }
+  while (dropDone(), Q.size(slug)) {
     const batch = Q.load(slug).slice(0, 100);
     try { sent(batch, await post(batch.map((e) => e.op))); continue; } catch (e) {
       const k = classify(e);
@@ -310,7 +326,7 @@ function boot(sl) {
   try { const cached = JSON.parse(localStorage.getItem(CACHE) || "null"); if (cached && cached.event) { S.server = cached.event; S.rev = 0; S.fromCache = true; applyTheme(cached.event); } } catch (e) { /* no cache */ }
   render();
   if (S.watcher) S.watcher.stop();
-  S.watcher = watchEvent(slug, (event, rev) => { if (rev < S.rev) return; applyServer({ event, rev }); render(); }, {
+  S.watcher = watchEvent(slug, (event, rev, resp) => { if (rev < S.rev) return; applyServer({ event, rev, judging: resp && resp.judging }); render(); }, {
     path: `/api/events/${encodeURIComponent(slug)}/full`, token: s.token,
     onError: (e) => {
       if (e.status === 401) { S.auth = true; return render(); }

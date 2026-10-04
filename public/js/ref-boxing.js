@@ -2,7 +2,7 @@
 // (score each round once it has ended). Rendering only; taps go through c.send() or c.sendNow().
 
 import { esc, plural } from "./ui.js";
-import { METHODS } from "../core/model.js";
+import { METHODS, firstName } from "../core/model.js";
 import { currentBout, judgeCard, resultText } from "../core/boxing.js";
 
 const METHOD_NAME = { PTS: "Points", KO: "KO", TKO: "TKO", RSC: "RSC", RTD: "RTD", DQ: "DQ", DRAW: "Draw", NC: "No contest" };
@@ -92,6 +92,12 @@ function clockHtml(b) {
   </section>`;
 }
 
+function waitingLine(c, b) {
+  const js = judgeStatus(c, b);
+  if (!js || b.state === "scheduled" || b.state === "done") return "";
+  return js.waiting.length ? `<p class="ecr-wait" role="status">Waiting on ${esc(waitText(js.waiting))}</p>` : "";
+}
+
 function controls(c, b) {
   const { ui } = c;
   const armed = ui.arm === `end:${b.id}`;
@@ -108,13 +114,27 @@ function controls(c, b) {
   </section>`;
 }
 
+// Who still has to score: from the website's judging progress (names and round numbers, never scores).
+function judgeStatus(c, b) {
+  const list = c.judging && c.judging[b.id];
+  if (b.scoring !== "judges" || !list) return null;
+  const ended = [];
+  for (let n = 1; n <= b.rounds; n++) if (n < b.round || (n === b.round && (b.state === "break" || b.state === "done"))) ended.push(n);
+  const waiting = list.map((j) => ({ name: j.name, rounds: ended.filter((n) => !j.rounds.includes(n)) })).filter((j) => j.rounds.length);
+  const complete = list.every((j) => Array.from({ length: b.rounds }, (_, i) => i + 1).every((n) => j.rounds.includes(n)));
+  return { waiting, complete };
+}
+const waitText = (w) => w.map((j) => `${firstName(j.name)}: ${j.rounds.length > 1 ? "rounds" : "round"} ${j.rounds.join(", ")}`).join(". ");
+
 function resultSheet(c, b) {
   const r = c.ui.result;
   if (!r || r.bout !== b.id) return "";
   const judged = b.scoring === "judges";
   const needsWinner = r.method !== "DRAW" && r.method !== "NC" && !(r.method === "PTS" && judged);
   const stop = STOPPAGES.includes(r.method);
-  const ready = !!r.method && (!needsWinner || !!r.winner);
+  const js = judgeStatus(c, b);
+  const ptsBlocked = r.method === "PTS" && judged && js && !js.complete;
+  const ready = !!r.method && (!needsWinner || !!r.winner) && !ptsBlocked;
   let summary = "";
   if (ready) {
     if (r.method === "PTS" && judged) summary = "On points. The result comes from the judges' cards.";
@@ -123,12 +143,12 @@ function resultSheet(c, b) {
   return `<section class="ec-card ecr-result" aria-labelledby="ecr-res-h">
     <h2 id="ecr-res-h" class="ecr-h">Record the result</h2>
     <fieldset class="ecr-fs"><legend>How did it end?</legend>
-      <div class="ecr-methods">${METHODS.map((m) => `<button type="button" class="ecr-method" data-act="res-method" data-v="${m}" data-f="rm:${m}" aria-pressed="${r.method === m}">${METHOD_NAME[m]}</button>`).join("")}</div>
+      <div class="ecr-methods">${METHODS.map((m) => `<button type="button" class="ecr-method" data-act="res-method" data-v="${m}" data-f="rm:${m}" aria-pressed="${r.method === m}">${m === "PTS" ? "Points decision" : METHOD_NAME[m]}</button>`).join("")}</div>
     </fieldset>
     ${r.method && needsWinner ? `<fieldset class="ecr-fs"><legend>Who won?</legend><div class="ecr-winners">
       ${["red", "blue"].map((w) => `<button type="button" class="ecr-win ecr-win--${w}" data-act="res-winner" data-v="${w}" data-f="rw:${w}" aria-pressed="${r.winner === w}"><span class="ecr-chip ecr-chip--${w}" aria-hidden="true">${w === "red" ? "R" : "B"}</span>${w === "red" ? "Red" : "Blue"}: ${esc(b[w].name)}</button>`).join("")}</div></fieldset>` : ""}
     ${r.method && stop ? `<div class="ec-field"><label for="ecr-res-round">Round it ended in</label><select id="ecr-res-round" class="ec-select" data-change="res-round" data-f="rr">${Array.from({ length: b.rounds }, (_, i) => `<option value="${i + 1}"${r.round === i + 1 ? " selected" : ""}>Round ${i + 1}</option>`).join("")}</select></div>` : ""}
-    ${r.method === "PTS" && judged ? '<p class="ec-help">The website adds up the three judges\' cards. Every judge must have scored every round.</p>' : ""}
+    ${r.method === "PTS" && judged ? `<p class="${ptsBlocked ? "ecr-wait" : "ec-help"}" role="status">${ptsBlocked ? esc(js.waiting.length ? `Waiting on ${waitText(js.waiting)}.` : `Waiting on the judges to score every round (${b.rounds}).`) : "Every judge has scored every round. The website adds up the cards."}</p>` : ""}
     ${summary ? `<p class="ecr-summary">${esc(summary)}</p>` : ""}
     ${r.error ? `<p class="ecr-err" role="alert">${esc(r.error)}</p>` : ""}
     ${r.confirm
@@ -154,7 +174,7 @@ export function renderReferee(c) {
   const cur = (ui.bout && bouts.find((b) => b.id === ui.bout)) || live || bouts[bouts.length - 1];
   const picked = !!live && cur.id !== live.id;
   const doneAll = !live && bouts.every((b) => b.state === "done");
-  return `${doneAll ? '<div class="ec-empty">Every bout on the card is done. Thank you.</div>' : ""}${boutHead(cur, picked)}${clockHtml(cur)}${controls(c, cur)}${resultSheet(c, cur)}${cardList(c, cur)}`;
+  return `${doneAll ? '<div class="ec-empty">Every bout on the card is done. Thank you.</div>' : ""}${boutHead(cur, picked)}${clockHtml(cur)}${waitingLine(c, cur)}${controls(c, cur)}${resultSheet(c, cur)}${cardList(c, cur)}`;
 }
 
 // ---- Referee actions ----
@@ -168,9 +188,9 @@ export async function actReferee(c, name, el) {
   if (name === "bout-end" && b) {
     if (ui.arm !== `end:${id}`) { ui.arm = `end:${id}`; clearTimeout(ui.armTimer); ui.armTimer = setTimeout(() => { ui.arm = null; c.rerender(); }, 4000); return c.rerender(); }
     ui.arm = null;
-    return c.send([{ op: "bout.action", id, action: "end-round" }], { haptic: [40, 40, 40], say: `Round ${b.round} ended` });
+    return c.send([{ op: "bout.action", id, action: "end-round", round: b.round }], { haptic: [40, 40, 40], say: `Round ${b.round} ended` });
   }
-  if (name === "bout-next" && b) { clockStart(c.slug, b.id, b.round + 1); return c.send([{ op: "bout.action", id, action: "next-round" }], { haptic: 20, say: `Round ${b.round + 1} started` }); }
+  if (name === "bout-next" && b) { clockStart(c.slug, b.id, b.round + 1); return c.send([{ op: "bout.action", id, action: "next-round", round: b.round }], { haptic: 20, say: `Round ${b.round + 1} started` }); }
   if (name === "bout-reopen" && b) return c.send([{ op: "bout.action", id, action: "reopen" }], { say: "Result cleared" });
   if (name === "result-open" && b) { ui.result = ui.result && ui.result.bout === id ? null : { bout: id, method: null, winner: null, round: b.round || 1, confirm: false, error: "" }; return c.rerender(); }
   const r = ui.result;
