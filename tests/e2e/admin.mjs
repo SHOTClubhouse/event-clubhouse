@@ -109,7 +109,13 @@ await step("organiser signs in and creates a football event; admin code shown on
 await step("my events lists the new event", async () => {
   await page.goto(`${base}/admin/`);
   await page.getByRole("heading", { name: "My events" }).waitFor();
-  await page.locator(".ecx-list__row", { hasText: `E2E Cup ${stamp}` }).first().waitFor();
+  await page.evaluate(() => localStorage.removeItem("ec.sessions.v1")); // no admin code on this device
+  await page.reload();
+  const row = page.locator(".ecx-list__row", { hasText: `E2E Cup ${stamp}` }).first();
+  await row.waitFor();
+  await row.getByRole("button", { name: /^Open/ }).click(); // one tap, no code
+  await page.waitForSelector("#panel-title");
+  assert.equal(slugOf(), (await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("ec.sessions.v1"))))).find((k) => k.startsWith("e2e-cup")));
   await page.goto(`${base}/admin/?e=${football}`);
   await page.waitForSelector("#panel-title");
 });

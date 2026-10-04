@@ -34,7 +34,7 @@ function boot() {
 
 function dashboard(s) {
   const ctx = {
-    slug, token: s.token, event: null, rev: 0, counts: null, codes: null, codesError: "", isDemo: /^p-[a-z0-9]{10}$/.test(slug),
+    slug, token: s.token, event: null, rev: 0, counts: null, codes: null, codesError: "", isDemo: false,
     dirty: false, stale: false, saving: 0, json: "", missed: false,
   };
   let watcher = null, timer = null, fails = 0, chain = Promise.resolve();
@@ -150,6 +150,7 @@ function dashboard(s) {
       const r = await sendOps(slug, ops);
       setEvent(r.event, r.rev);
       if (r.counts) ctx.counts = r.counts;
+      if (typeof r.demo === "boolean") ctx.isDemo = r.demo;
       online(true);
       if (success) toast(success, "ok");
       return { ok: true };
@@ -175,14 +176,9 @@ function dashboard(s) {
   }
   ctx.get = (path, { auth = true } = {}) => call(() => api.get(path, { token: auth ? ctx.token : undefined }), auth);
   ctx.post = (path, body) => call(() => api.post(path, body, { token: ctx.token }));
-  // The one place that needs the raw response: a file download. api.js only reads JSON.
   ctx.download = async (path, filename) => {
-    let res;
-    try { res = await fetch(path, { headers: { Authorization: `Bearer ${ctx.token}` }, cache: "no-store" }); }
-    catch (e) { throw new Error("No connection. Check your signal and try again."); }
-    if (res.status === 401) { const m = await res.json().catch(() => ({})); expired(m.error); throw new Error(m.error || "Sign in again."); }
-    if (!res.ok) { const m = await res.json().catch(() => ({})); throw new Error(m.error || "The download didn't work. Try again."); }
-    const url = URL.createObjectURL(await res.blob());
+    const text = await call(() => api.text(path, { token: ctx.token }));
+    const url = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
     const a = h("a", { href: url, download: filename });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
@@ -194,7 +190,11 @@ function dashboard(s) {
   ctx.reload = () => { if (watcher) watcher.refresh(); pollCounts(); };
 
   // ---- Polling ----
-  function onEvent(ev, rev) {
+  // Counts arrive with every event change. Registrations and votes do not change the event, so a
+  // slow poll keeps the counts fresh between changes.
+  function onEvent(ev, rev, res) {
+    if (res && res.counts) ctx.counts = res.counts;
+    if (res && typeof res.demo === "boolean" && res.demo !== ctx.isDemo) { ctx.isDemo = res.demo; ctx.json = ""; }
     if (ctx.saving) { ctx.missed = true; return; }
     if (JSON.stringify(ev) === ctx.json) { ctx.rev = rev; return; }
     setEvent(ev, rev); drawHead(); soft();
@@ -205,6 +205,7 @@ function dashboard(s) {
       online(true);
       const changed = JSON.stringify(r.counts) !== JSON.stringify(ctx.counts);
       ctx.counts = r.counts;
+      if (typeof r.demo === "boolean") ctx.isDemo = r.demo;
       if (changed && ["overview", "live"].includes(current())) soft();
     } catch (e) { if (e.status === 401) expired(e.message); else online(false); }
   }
@@ -214,7 +215,7 @@ function dashboard(s) {
     panel.replaceChildren(h("div", { "aria-busy": "true" }, skeleton(5)));
     try {
       const r = await fullEvent(slug);
-      setEvent(r.event, r.rev); ctx.counts = r.counts || null;
+      setEvent(r.event, r.rev); ctx.counts = r.counts || null; ctx.isDemo = !!r.demo;
     } catch (e) {
       if (e.status === 401) return expired(e.message);
       panel.replaceChildren(h("div", { class: "ec-card ecx-stack", role: "alert" },
@@ -227,7 +228,6 @@ function dashboard(s) {
     if (!location.hash) history.replaceState(null, "", `${location.pathname}${location.search}#overview`);
     render();
     ctx.reloadCodes().then(() => { if (current() === "overview" || current() === "codes") soft(); });
-    api.get("/api/demo").then((d) => { if ((d.events || []).some((e) => e.slug === slug) && !ctx.isDemo) { ctx.isDemo = true; soft(); } }).catch(() => {});
     watcher = watchEvent(slug, onEvent, { path: `/api/events/${slug}/full`, token: ctx.token, onError: (e) => { if (e.status === 401) expired(e.message); else online(false); } });
     timer = setInterval(() => { if (!document.hidden) pollCounts(); }, 10000);
   }

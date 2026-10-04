@@ -1,7 +1,7 @@
 // The screen with no event open: sign in with an admin code or an organiser key, see the events
 // this device is signed in to, list "My events", and create a new one (its admin code is shown once).
 
-import { api, sessionsFor, signIn, signOut, organiser, organiserSignIn, organiserSignOut } from "./api.js";
+import { api, sessionsFor, signIn, signOut, organiser, organiserSignIn, organiserSignOut, organiserOpen } from "./api.js";
 import { h, field, input, select, btn, msgBox, showMsg, withBusy, copyText, confirmBox, skeleton, fmtDate, plural } from "./admin-lib.js";
 
 const SPORT = { football: "Football", boxing: "Boxing" };
@@ -10,6 +10,7 @@ const open = (slug) => { location.href = `/admin/?e=${encodeURIComponent(slug)}`
 
 // opts: { slug (an event the link asked for), message (why we are here) }
 export function renderSignIn(root, opts = {}) {
+  const draft = { name: "", sport: "football", date: "" }; // survives a redraw while My events loads
   let created = null; // { slug, name, code } shown once
   let mine = { state: organiser() ? "loading" : "off", events: [], error: "" };
 
@@ -108,21 +109,28 @@ export function renderSignIn(root, opts = {}) {
     if (mine.state === "loading") return skeleton(3);
     if (mine.state === "error") return h("div", { class: "ecx-stack" }, h("p", { class: "ec-error", role: "alert", text: mine.error }), btn("Try again", () => { mine.state = "loading"; draw(); loadMine(); }, { cls: "ec-btn--ghost ec-btn--sm" }));
     if (!mine.events.length) return h("div", { class: "ec-empty" }, h("p", { text: "You have no events yet. Create your first one below." }));
-    const known = new Set(sessionsFor(["admin"]).map((s) => s.slug));
-    return h("ul", { class: "ecx-list", "aria-label": "My events" }, mine.events.map((ev) => h("li", { class: "ecx-list__row" },
+    const err = msgBox();
+    return h("div", { class: "ecx-stack" }, h("ul", { class: "ecx-list", "aria-label": "My events" }, mine.events.map((ev) => h("li", { class: "ecx-list__row" },
       h("div", { class: "ecx-grow" },
         h("strong", { text: ev.name }),
         h("div", { class: "ec-small ec-muted", text: `${SPORT[ev.sport] || ev.sport} · ${fmtDate(ev.date)} · ${PHASE[ev.phase] || ev.phase}` })),
-      known.has(ev.slug)
-        ? btn("Open", () => open(ev.slug), { cls: "ec-btn--sm", label: `Open ${ev.name}` })
-        : btn("Enter code", () => { location.href = `/admin/?e=${encodeURIComponent(ev.slug)}`; }, { cls: "ec-btn--ghost ec-btn--sm", label: `Enter the admin code for ${ev.name}` }))));
+      btn("Open", async function () {
+        showMsg(err, "");
+        await withBusy(this, async () => {
+          try { await organiserOpen(ev.slug); open(ev.slug); }
+          catch (e) { showMsg(err, `${ev.name}: ${e.message}`); }
+        });
+      }, { cls: "ec-btn--sm", label: `Open ${ev.name}` })))), err);
   }
 
   function createForm() {
     const msg = msgBox();
-    const name = input({ maxlength: "80", placeholder: "Summer Sixes Cup", "aria-required": "true" });
-    const sport = select([["football", "Football (any variant)"], ["boxing", "Boxing"]], "football");
-    const date = input({ type: "date" });
+    const name = input({ maxlength: "80", placeholder: "Summer Sixes Cup", "aria-required": "true", value: draft.name });
+    const sport = select([["football", "Football (any variant)"], ["boxing", "Boxing"]], draft.sport);
+    const date = input({ type: "date", value: draft.date });
+    name.addEventListener("input", () => { draft.name = name.value; });
+    sport.addEventListener("change", () => { draft.sport = sport.value; });
+    date.addEventListener("input", () => { draft.date = date.value; });
     const go = btn("Create event", null, { type: "submit", cls: "ec-btn--block" });
     return h("form", { class: "ecx-stack ecx-create", novalidate: true, onsubmit: async (e) => {
       e.preventDefault(); showMsg(msg, "");
@@ -131,6 +139,7 @@ export function renderSignIn(root, opts = {}) {
         try {
           const r = await api.post("/api/events", { name: name.value.trim(), sport: sport.value, ...(date.value ? { date: date.value } : {}) }, { token: organiser().token });
           await signIn(r.adminCode); // this device is now signed in as the event's admin
+          draft.name = ""; draft.date = "";
           created = { slug: r.slug, name: r.event.name, code: r.adminCode };
           loadMine();
           draw();
