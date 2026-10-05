@@ -3,6 +3,7 @@
 // replaced by the server's answer, or rolled back with the server's message.
 
 import { applyOps } from "../core/ops.js";
+import { terms } from "../core/model.js";
 import { api, session, signOut, sendOps, fullEvent, watchEvent } from "./api.js";
 import { applyTheme, toast } from "./ui.js";
 import { h, btn, skeleton } from "./admin-lib.js";
@@ -21,9 +22,9 @@ const app = document.getElementById("app");
 const slug = new URLSearchParams(location.search).get("e");
 const PHASE = { pre: "Before", live: "Live", post: "After" };
 
-const tabsFor = (sport) => (sport === "boxing"
+const tabsFor = (sport, ev) => (sport === "boxing"
   ? [["overview", "Overview", overview], ["details", "Details", details], ["card", "Fight card", card], ["officials", "Judges and referees", officials], ["codes", "Access codes", codes], ["live", "Live control", live], ["after", "After", after]]
-  : [["overview", "Overview", overview], ["details", "Details", details], ["teams", "Teams", teams], ["officials", "Pitches and officials", officials], ["fixtures", "Fixtures", fixtures], ["codes", "Access codes", codes], ["live", "Live control", live], ["after", "After", after]]);
+  : [["overview", "Overview", overview], ["details", "Details", details], ["teams", "Teams", teams], ["officials", `${terms(ev).Places} and officials`, officials], ["fixtures", "Fixtures", fixtures], ["codes", "Access codes", codes], ["live", "Live control", live], ["after", "After", after]]);
 
 function boot() {
   if (!slug) return renderSignIn(app, {});
@@ -62,7 +63,7 @@ function dashboard(s) {
     nav, main);
   panel.append(h("div", { "aria-busy": "true" }, skeleton(5)));
 
-  const tabs = () => tabsFor(ctx.event ? ctx.event.sport : s.event.sport);
+  const tabs = () => (() => { const e = ctx.event || s.event; return tabsFor(e.sport, e); })();
   const current = () => { const id = location.hash.slice(1); const t = tabs().find((x) => x[0] === id); return t ? t[0] : "overview"; };
   ctx.tab = current;
 

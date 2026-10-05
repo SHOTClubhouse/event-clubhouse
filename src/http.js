@@ -53,7 +53,7 @@ export const CSP = [
   "img-src 'self' data: https:",
   "media-src 'self' blob: https:",
   "connect-src 'self' https:",
-  "frame-src 'self' https://www.youtube-nocookie.com https://player.twitch.tv",
+  "frame-src 'self' https://www.youtube-nocookie.com https://player.twitch.tv https://open.spotify.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

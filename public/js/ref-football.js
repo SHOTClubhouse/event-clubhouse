@@ -2,7 +2,7 @@
 // Pure rendering from the event as the phone should show it; every tap goes through c.send().
 
 import { esc, side, pitchName } from "./ui.js";
-import { streamInfo, HTTPS } from "../core/model.js";
+import { streamInfo, HTTPS, terms } from "../core/model.js";
 import { restoreOps } from "./ref-queue.js";
 
 const STATES = [["scheduled", "Not started"], ["live", "Live"], ["ft", "FT"]];
@@ -40,13 +40,14 @@ export function lists(c) {
 export const anyLive = (c) => lists(c).live.length > 0;
 
 function sideCol(c, f, which, nm) {
+  const T = terms(c.event);
   const n = f[which === "home" ? "homeScore" : "awayScore"];
   const started = f.state !== "scheduled";
   return `<div class="ecr-side">
     <p class="ecr-name${nm.tbc ? " is-tbc" : ""}">${esc(nm.text)}</p>
     <p class="ecr-score${started ? "" : " is-idle"}" aria-label="${esc(nm.text)} ${n ?? 0}">${n ?? 0}</p>
-    <button type="button" class="ec-btn ecr-plus" data-act="score" data-id="${esc(f.id)}" data-side="${which}" data-d="1" data-f="p:${esc(f.id)}:${which}" aria-label="Goal for ${esc(nm.text)}">+</button>
-    <button type="button" class="ec-btn ec-btn--ghost ecr-minus" data-act="score" data-id="${esc(f.id)}" data-side="${which}" data-d="-1" data-f="m:${esc(f.id)}:${which}" aria-label="Take a goal off ${esc(nm.text)}"${(n ?? 0) === 0 ? " disabled" : ""}>&minus;</button>
+    <button type="button" class="ec-btn ecr-plus" data-act="score" data-id="${esc(f.id)}" data-side="${which}" data-d="1" data-f="p:${esc(f.id)}:${which}" aria-label="${esc(T.Score)} for ${esc(nm.text)}">+</button>
+    <button type="button" class="ec-btn ec-btn--ghost ecr-minus" data-act="score" data-id="${esc(f.id)}" data-side="${which}" data-d="-1" data-f="m:${esc(f.id)}:${which}" aria-label="Take a ${esc(T.score)} off ${esc(nm.text)}"${(n ?? 0) === 0 ? " disabled" : ""}>&minus;</button>
   </div>`;
 }
 
@@ -97,14 +98,14 @@ function section(title, count, html, extra = "") {
 function filters(c) {
   const { event, ui } = c;
   const scope = ui.scope || "mine";
-  const pitches = event.pitches || [];
+  const pitches = event.pitches || [], T = terms(event);
   return `<div class="ecr-filters">
     <div class="ec-seg" role="group" aria-label="Which games">
       <button type="button" data-act="scope" data-v="mine" aria-pressed="${scope === "mine"}" data-f="sc:mine">My games</button>
       <button type="button" data-act="scope" data-v="all" aria-pressed="${scope === "all"}" data-f="sc:all">All games</button>
     </div>
-    ${pitches.length > 1 ? `<div class="ec-field ecr-pitchsel"><label for="ecr-pitch">Pitch</label><select id="ecr-pitch" class="ec-select" data-change="pitch" data-f="pitch">
-      <option value="all">All pitches</option>${pitches.map((p) => `<option value="${esc(p.id)}"${ui.pitch === p.id ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>` : ""}
+    ${pitches.length > 1 ? `<div class="ec-field ecr-pitchsel"><label for="ecr-pitch">${esc(T.Place)}</label><select id="ecr-pitch" class="ec-select" data-change="pitch" data-f="pitch">
+      <option value="all">All ${esc(T.places)}</option>${pitches.map((p) => `<option value="${esc(p.id)}"${ui.pitch === p.id ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>` : ""}
   </div>`;
 }
 
@@ -136,7 +137,7 @@ function streamPanel(c) {
   const d = ui.drafts || {};
   const url = d[`stream:${target}:url`] ?? now.url ?? "";
   const label = d[`stream:${target}:label`] ?? now.label ?? "";
-  const where = target ? pitchName(event, target) : "the event";
+  const where = target ? pitchName(event, target) : "the event", T = terms(event);
   const dirty = url !== (now.url ?? "") || label !== (now.label ?? "");
   if (c.publicDemo) {
     return `<section class="ec-card ecr-stream" aria-labelledby="ecr-stream-h">
@@ -150,7 +151,7 @@ function streamPanel(c) {
       <input id="ecr-stream-url" class="ec-input" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://youtube.com/live/…" value="${esc(url)}" data-draft="stream:${esc(String(target))}:url" data-f="su" aria-describedby="ecr-stream-verdict"></div>
     <p id="ecr-stream-verdict" class="ec-help ecr-verdict" aria-live="polite">${esc(verdict(url))}</p>
     <div class="ec-field"><label for="ecr-stream-label">Title fans see (optional)</label>
-      <input id="ecr-stream-label" class="ec-input" maxlength="80" autocomplete="off" placeholder="Pitch 1, live" value="${esc(label)}" data-draft="stream:${esc(String(target))}:label" data-f="sl"></div>
+      <input id="ecr-stream-label" class="ec-input" maxlength="80" autocomplete="off" placeholder="${esc(T.Place)} 1, live" value="${esc(label)}" data-draft="stream:${esc(String(target))}:label" data-f="sl"></div>
     <div class="ecr-onoff" role="group" aria-label="Stream on or off">
       <button type="button" data-act="stream" data-on="false" aria-pressed="${!now.on}" data-f="s:off">Off</button>
       <button type="button" data-act="stream" data-on="true" aria-pressed="${!!now.on}" data-f="s:on">On</button>
@@ -169,7 +170,7 @@ export function render(c) {
   let body = "";
   if (!L.list.length) {
     const scope = ui.scope || "mine";
-    body = `<div class="ec-empty">${scope === "mine" ? "No games are assigned to you yet." : "No games on this pitch."}${scope === "mine" ? '<p><button type="button" class="ec-btn" data-act="scope" data-v="all" data-f="sc:all2">Show all games</button></p>' : ""}</div>`;
+    body = `<div class="ec-empty">${scope === "mine" ? "No games are assigned to you yet." : `No games on this ${terms(event).place}.`}${scope === "mine" ? '<p><button type="button" class="ec-btn" data-act="scope" data-v="all" data-f="sc:all2">Show all games</button></p>' : ""}</div>`;
   } else {
     if (L.live.length) body += section("Live now", L.live.length, L.live.map(card).join(""));
     if (L.next.length) body += section(L.live.length ? "Next up" : "Next up", L.next.length, L.next.map(card).join(""));

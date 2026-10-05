@@ -89,7 +89,9 @@ function check(doc) {
   if (!optText(d.about, 2000)) errs.push("about: 2000 characters or fewer");
   const th = d.theme || {};
   if (!COLOUR.test(th.accent || "")) errs.push("theme.accent: a #rrggbb colour");
-  if (!optUrl(th.logo)) errs.push("theme.logo: an https link");
+  // A logo is an https link, or the event's own logo address (a private demo's logo is kept on
+  // the server and served from there).
+  if (!(optUrl(th.logo) || (typeof th.logo === "string" && th.logo === `/api/events/${d.slug}/logo`))) errs.push("theme.logo: an https link");
   if (!optText(th.partner, 60)) errs.push("theme.partner: 60 characters or fewer");
   const ln = d.links || {};
   if (!optUrl(ln.tickets)) errs.push("links.tickets: an https link");
@@ -101,6 +103,7 @@ function check(doc) {
   const pts = s.points || {};
   if (![pts.win, pts.draw, pts.loss].every((n) => Number.isInteger(n) && n >= 0 && n <= 10)) errs.push("settings.points: whole numbers 0 to 10");
   errs.push(...streamErrors(d.stream, "stream"));
+  if (s.juniors != null && typeof s.juniors !== "boolean") errs.push("settings.juniors: true or false");
   if (s.terms != null) {
     const t = s.terms;
     if (typeof t !== "object" || Array.isArray(t)) errs.push("settings.terms: an object");
@@ -183,6 +186,7 @@ function check(doc) {
     if (!Array.isArray(b.judges) || b.judges.some((j) => !offIds.has(j))) errs.push(`${at}: judges must be officials`);
     ["red", "blue"].forEach((c) => { if (!b[c] || !text(b[c].name, 40) || !optText(b[c].club, 40)) errs.push(`${at}: ${c} corner needs a name`); });
     if (!BOUT_STATES.includes(b.state)) errs.push(`${at}: state one of ${BOUT_STATES.join(", ")}`);
+    if (b.pitch != null && !pitchIds.has(b.pitch)) errs.push(`${at}: unknown ring ${b.pitch}`);
     if (!Number.isInteger(b.round) || b.round < 0 || b.round > b.rounds) errs.push(`${at}: round 0 to ${b.rounds}`);
     if (b.result != null) {
       const r = b.result;
@@ -202,6 +206,7 @@ function check(doc) {
     });
   });
   if (d.sport === "fitness") errs.push(...compErrors(d.comp));
+  if (d.clubhouse != null) errs.push(...clubhouseErrors(d.clubhouse));
   (Array.isArray(d.updates) ? d.updates : errs.push("updates missing") && []).forEach((u) => {
     if (!ID.test(u.id || "")) errs.push(`update ${u.id}: missing id`);
     if (!text(u.title, 120) || !optText(u.body, 2000) || !optUrl(u.link)) errs.push(`update ${u.id}: title up to 120, body up to 2000, link https`);
@@ -347,6 +352,11 @@ export function publicView(doc) {
     t.players = (t.players || []).map((p) => ({ id: p.id, label: playerLabel(p, by), number: by === "name" ? undefined : p.number ?? undefined }));
   }));
   d.officials = d.officials.map((o) => ({ id: o.id, name: firstName(o.name), role: o.role, pitch: o.pitch ?? null }));
+  // Juniors: the public sees team names, and boxers by first name and club. No squads at all.
+  if (d.settings.juniors) {
+    d.divisions.forEach((v) => v.teams.forEach((t) => { t.players = []; }));
+    d.card.bouts.forEach((b) => ["red", "blue"].forEach((c) => { if (b[c]) b[c] = { ...b[c], name: firstName(b[c].name) }; }));
+  }
   const show = d.settings.showCards || "after";
   const done = new Set(d.card.bouts.filter((b) => b.state === "done").map((b) => b.id));
   Object.keys(d.scorecards || {}).forEach((bout) => { if (show === "never" || (show === "after" && !done.has(bout))) delete d.scorecards[bout]; });
@@ -383,6 +393,46 @@ export function streamInfo(s) {
 // registration, both from here, so what was shown and what was recorded can never differ.
 // The organiser names themselves through theme.partner; otherwise the event name stands in.
 export const consentText = (doc) => `${(doc.theme && doc.theme.partner) || doc.name} and SHOT Clubhouse can email me about ${doc.name}, future events and the clubhouse. I can unsubscribe at any time.`;
+
+// ---- The event's clubhouse (docs/CLUBHOUSE.md) ----
+export const SPOTIFY = /^https:\/\/open\.spotify\.com\/(playlist|album|artist|show)\/([A-Za-z0-9]{10,40})(\?.*)?$/;
+export const LINEUP_ROLES = ["DJ", "Live", "MC", "Host", "Artist"];
+export const REWARD_HOWS = ["register", "vote", "attend", "streak", "share"];
+export const spotifyEmbed = (url) => { const m = typeof url === "string" && url.match(SPOTIFY); return m ? `https://open.spotify.com/embed/${m[1]}/${m[2]}` : null; };
+
+function clubhouseErrors(c) {
+  const e = [];
+  if (typeof c !== "object" || Array.isArray(c)) return ["clubhouse: an object"];
+  const list = (v, max, at) => (v == null ? [] : Array.isArray(v) && v.length <= max ? v : (e.push(`${at}: up to ${max}`), []));
+  const ids = (arr, at) => { const seen = new Set(); arr.forEach((x) => { if (!x || !ID.test(x.id || "") || seen.has(x.id)) e.push(`${at} ${x && x.id}: missing or duplicate id`); else seen.add(x.id); }); };
+  if (typeof c.on !== "boolean") e.push("clubhouse.on: true or false");
+  if (!optText(c.intro, 300)) e.push("clubhouse.intro: up to 300 characters");
+  if (c.members != null && !(Number.isInteger(c.members) && c.members >= 0 && c.members <= 10000000)) e.push("clubhouse.members: a whole number");
+  const tiers = list(c.tiers, 4, "clubhouse.tiers");
+  ids(tiers, "tier");
+  tiers.forEach((t) => {
+    if (!t || !text(t.name, 60)) e.push(`tier ${t && t.id}: name 1 to 60 characters`);
+    if (t && !(Array.isArray(t.benefits) && t.benefits.length <= 8 && t.benefits.every((b) => text(b, 80)))) e.push(`tier ${t.id}: up to 8 benefits of 80 characters`);
+    if (t && !optText(t.price, 30)) e.push(`tier ${t.id}: price up to 30 characters, or none`);
+  });
+  const cu = c.culture || {};
+  if (cu.playlist != null && cu.playlist !== "" && !SPOTIFY.test(cu.playlist)) e.push("clubhouse.culture.playlist: a Spotify playlist, album, artist or show link");
+  list(cu.lineup, 12, "clubhouse.culture.lineup").forEach((x, i) => {
+    if (!x || !text(x.name, 60) || !LINEUP_ROLES.includes(x.role) || !(x.time == null || TIME.test(x.time))) e.push(`line-up ${i + 1}: a name, a role (${LINEUP_ROLES.join(", ")}) and an optional HH:MM`);
+  });
+  const drops = list(cu.drops, 6, "clubhouse.culture.drops");
+  ids(drops, "drop");
+  drops.forEach((x) => { if (x && (!text(x.title, 60) || !optText(x.body, 300) || !optText(x.when, 30))) e.push(`drop ${x.id}: title up to 60, text up to 300`); });
+  const co = c.community || {};
+  const posts = list(co.posts, 12, "clubhouse.community.posts");
+  ids(posts, "post");
+  posts.forEach((x) => { if (x && (!text(x.who, 60) || !text(x.text, 300) || !["post", "photo", "shoutout"].includes(x.kind) || !optText(x.ago, 20))) e.push(`post ${x.id}: who, text up to 300 and a kind`); });
+  list(co.next, 6, "clubhouse.community.next").forEach((x, i) => { if (!x || !DATE.test(x.date || "") || !text(x.title, 80) || !optText(x.where, 80)) e.push(`next ${i + 1}: a date, a title and an optional place`); });
+  const rewards = list(c.rewards, 8, "clubhouse.rewards");
+  ids(rewards, "reward");
+  rewards.forEach((x) => { if (x && (!text(x.name, 60) || !REWARD_HOWS.includes(x.how) || !optText(x.text, 120))) e.push(`reward ${x.id}: a name and how it's earned (${REWARD_HOWS.join(", ")})`); });
+  return e;
+}
 
 // ---- Words ----
 // terms(doc).place is "pitch", .places "pitches", .Place "Pitch"; .score "goal", .Score "Goal",

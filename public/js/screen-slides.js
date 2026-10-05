@@ -5,6 +5,7 @@ import { esc, side, pitchName } from "/js/ui.js";
 import { tables, champion, winnerOf } from "/core/standings.js";
 import { currentBout, resultText, decision } from "/core/boxing.js";
 import { fmtDate, byTime } from "/js/event-views.js";
+import { terms } from "/core/model.js";
 
 const RECENT_MS = 3 * 60 * 1000;
 const score = (f) => (f.homeScore == null ? "v" : `${esc(f.homeScore)}<i>-</i>${esc(f.awayScore)}`);
@@ -18,7 +19,7 @@ function card(ev, f, o = {}) {
 }
 
 function gamesSlide(S) {
-  const ev = S.event, fx = ev.fixtures, now = Date.now();
+  const ev = S.event, fx = ev.fixtures, now = Date.now(), T = terms(ev);
   if (!fx.length) return null;
   const groups = ev.pitches.map((p) => ({ id: p.id, name: p.name }));
   if (!groups.length || fx.some((f) => !f.pitch || !ev.pitches.some((p) => p.id === f.pitch))) groups.push({ id: null, name: groups.length ? "Other games" : "Games" });
@@ -31,16 +32,16 @@ function gamesSlide(S) {
   if (!cols.length) return null;
   const anyLive = cols.some((c) => c.live.length);
   return { key: "games", max: 3, build: (n) => `<div class="ecv-slide ecv-games" style="--c:${Math.min(cols.length, 3)}">
-    ${cols.map((c) => `<section><h2 class="ecv-h">${esc(c.g.name)}</h2>${c.live.map((f) => card(ev, f)).join("")}${c.done.slice(0, 2).map((f) => card(ev, f)).join("")}${c.next.length && n > 0 ? `<h3 class="ecv-h3">${c.live.length ? "Up next" : anyLive ? "Next on this pitch" : "Up next"}</h3>${c.next.slice(0, c.live.length ? Math.min(n, 2) : n).map((f) => card(ev, f, { small: true })).join("")}` : ""}</section>`).join("")}</div>` };
+    ${cols.map((c) => `<section><h2 class="ecv-h">${esc(c.g.name)}</h2>${c.live.map((f) => card(ev, f)).join("")}${c.done.slice(0, 2).map((f) => card(ev, f)).join("")}${c.next.length && n > 0 ? `<h3 class="ecv-h3">${c.live.length ? "Up next" : anyLive ? `Next on this ${T.place}` : "Up next"}</h3>${c.next.slice(0, c.live.length ? Math.min(n, 2) : n).map((f) => card(ev, f, { small: true })).join("")}` : ""}</section>`).join("")}</div>` };
 }
 
 function tableSlides(S) {
-  const ev = S.event, out = [];
+  const ev = S.event, out = [], T = terms(ev);
   ev.divisions.filter((d) => d.format !== "exhibition" && d.format !== "knockout" && d.teams.length).forEach((d) => {
     const ts = tables(d, ev.fixtures, ev.settings.points);
     for (let i = 0; i < ts.length; i += 4) {
       const chunk = ts.slice(i, i + 4);
-      out.push({ key: `tab:${d.id}:${i}`, max: 1, build: () => `<div class="ecv-slide"><h2 class="ecv-title">${esc(ev.divisions.length > 1 ? d.name : "Tables")}${ts.length > 4 ? ` <small>${i / 4 + 1}/${Math.ceil(ts.length / 4)}</small>` : ""}</h2><div class="ecv-tabs" style="--c:${chunk.length > 2 ? 2 : chunk.length}">${chunk.map((t) => `<table class="ecv-table"><caption>${t.group ? `Group ${esc(t.group)}` : "Table"}</caption><thead><tr><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th></tr></thead><tbody>${t.rows.map((r, k) => `<tr class="${k < 2 && r.p ? "is-up" : ""}"><td class="t"><i>${k + 1}</i>${esc(r.name)}</td><td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gd > 0 ? "+" : ""}${r.gd}</td><td><b>${r.pts}</b></td></tr>`).join("")}</tbody></table>`).join("")}</div></div>` });
+      out.push({ key: `tab:${d.id}:${i}`, max: 1, build: () => `<div class="ecv-slide"><h2 class="ecv-title">${esc(ev.divisions.length > 1 ? d.name : "Tables")}${ts.length > 4 ? ` <small>${i / 4 + 1}/${Math.ceil(ts.length / 4)}</small>` : ""}</h2><div class="ecv-tabs" style="--c:${chunk.length > 2 ? 2 : chunk.length}">${chunk.map((t) => `<table class="ecv-table"><caption>${t.group ? `Group ${esc(t.group)}` : "Table"}</caption><thead><tr><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>${esc(T.diff.abbr)}</th><th>Pts</th></tr></thead><tbody>${t.rows.map((r, k) => `<tr class="${k < 2 && r.p ? "is-up" : ""}"><td class="t"><i>${k + 1}</i>${esc(r.name)}</td><td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gd > 0 ? "+" : ""}${r.gd}</td><td><b>${r.pts}</b></td></tr>`).join("")}</tbody></table>`).join("")}</div></div>` });
     }
   });
   return out;
@@ -85,7 +86,7 @@ function helloSlide(S) {
   if (ev.phase === "post" && (champs.length || bout)) {
     return { key: "champ", max: 1, build: () => `<div class="ecv-slide ecv-champ"><p class="ecv-kicker">${champs.length ? "Champions" : esc(bout.title || "Main event")}</p><h2>${esc(champs.length ? champs[0].t.name : bout.result.winner ? bout[bout.result.winner].name : "No winner")}</h2><p>${esc(champs.length ? champs[0].c.how : resultText(bout))}</p>${qrBox(S, "Results and updates")}</div>` };
   }
-  return { key: "hello", max: 1, build: () => `<div class="ecv-slide ecv-hello"><div><p class="ecv-kicker">${ev.phase === "pre" ? "Coming up" : ev.phase === "post" ? "That's a wrap" : "Welcome"}</p><h2>${esc(ev.name)}</h2><p>${esc([fmtDate(ev.date), ev.venue].filter(Boolean).join(" at "))}</p></div>${qrBox(S, ev.phase === "pre" ? "Scan to register" : "Scan to follow live")}</div>` };
+  return { key: "hello", max: 1, build: () => `<div class="ecv-slide ecv-hello"><div><p class="ecv-kicker">${ev.phase === "pre" ? "Coming up" : ev.phase === "post" ? "That's a wrap" : "Welcome"}</p><h2>${esc(ev.name)}</h2><p>${esc([fmtDate(ev.date), ev.venue].filter(Boolean).join(" at "))}</p>${terms(ev).discipline ? `<p>${esc(terms(ev).discipline)}</p>` : ""}</div>${qrBox(S, ev.phase === "pre" ? "Scan to register" : "Scan to follow live")}</div>` };
 }
 
 // ---- Boxing ----
@@ -139,5 +140,5 @@ export function goalHtml(S, g) {
   const ev = S.event, f = ev.fixtures.find((x) => x.id === g.id);
   if (!f) return "";
   const h = side(ev, f, "home"), a = side(ev, f, "away");
-  return `<div class="ecv-goal" role="status"><p>Goal</p><h2>${esc(g.team)}</h2><div class="ecv-goal__s"><span>${esc(h.text)}</span><b>${esc(f.homeScore)}<i>-</i>${esc(f.awayScore)}</b><span>${esc(a.text)}</span></div><small>${esc(pitchName(ev, f.pitch))}</small></div>`;
+  return `<div class="ecv-goal" role="status"><p>${esc(terms(ev).Score)}</p><h2>${esc(g.team)}</h2><div class="ecv-goal__s"><span>${esc(h.text)}</span><b>${esc(f.homeScore)}<i>-</i>${esc(f.awayScore)}</b><span>${esc(a.text)}</span></div><small>${esc(pitchName(ev, f.pitch))}</small></div>`;
 }

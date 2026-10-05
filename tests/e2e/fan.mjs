@@ -103,6 +103,35 @@ await step("futsal (pre): a bad email gives a specific error and keeps what was 
 });
 
 // ---- 2. On the day, football: beach-soccer-cup ----
+await step("futsal (pre): court and point words follow the organiser's settings, then the demo is reset", async () => {
+  const demo = await getJson("/api/demo");
+  const code = demo.events.find((e) => e.slug === "futsal-finals").codes.find((c) => c.role === "admin").code;
+  const auth = await (await fetch(`${BASE}/api/auth`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) })).json();
+  const post = (path, body) => fetch(`${BASE}/api/events/futsal-finals/${path}`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${auth.token}` }, body: JSON.stringify(body) });
+  try {
+    const r = await post("ops", { ops: [{ op: "settings.set", terms: { place: "court", score: "point", discipline: "Futsal" } }] });
+    ok(r.ok, `settings.set refused: ${r.status}`);
+    const p = await page();
+    await p.goto(`${BASE}/e/futsal-finals/`);
+    await p.waitForSelector(".ece-title");
+    ok((await p.textContent(".ece-meta")).includes("Futsal"), "discipline label shows by the date");
+    await p.click('a.ece-tab[href="#schedule"]');
+    await p.waitForSelector(".ece-seg");
+    const filter = await p.getAttribute(".ece-seg", "aria-label");
+    ok(filter === "Filter by court", `filter label is "${filter}"`);
+    const seg = await p.textContent(".ece-seg");
+    ok(seg.includes("All courts") && !/pitch/i.test(seg), `schedule filter says "${seg.trim().slice(0, 60)}"`);
+    ok(!/pitch/i.test(await p.textContent("body")), "no 'pitch' anywhere on the schedule page");
+    await p.click('a.ece-tab[href="#home"]');
+    await p.waitForSelector(".ece-hero");
+    ok(/courts/.test(await p.textContent(".ece-hero")), "home stats tile says courts");
+    await p.screenshot({ path: ".screens/fan/terms-court.png", fullPage: true });
+    await p.close();
+  } finally {
+    const r = await post("reset", {});
+    ok(r.ok, `reset refused: ${r.status}`);
+  }
+});
 await step("beach (live): scores render, a vote succeeds, is remembered, and can be changed", async () => {
   const ev = (await getJson("/api/events/beach-soccer-cup")).event;
   if (!ev.fixtures.some((f) => f.state === "live")) {

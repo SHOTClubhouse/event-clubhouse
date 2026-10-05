@@ -194,8 +194,9 @@ export const OPS = {
   "phase.set": { roles: ADMIN, run(d, o) { if (!PHASES.includes(o.phase)) return "Unknown phase."; d.phase = o.phase; } },
   "settings.set": { roles: ADMIN, run(d, o) {
     if (o.voteBy !== undefined && !VOTE_BY.includes(o.voteBy)) return "Show players by number, name or both.";
-    Object.assign(d.settings, pick(o, ["voteBy", "lockSecs", "points", "showCards", "terms"]));
+    Object.assign(d.settings, pick(o, ["voteBy", "lockSecs", "points", "showCards", "terms", "juniors"]));
   } },
+  "clubhouse.set": { roles: ADMIN, run(d, o) { if (!o.clubhouse || typeof o.clubhouse !== "object") return "Send the clubhouse."; d.clubhouse = o.clubhouse; } },
   "vote.open": { roles: ADMIN, run(d, o) { d.settings.vote = { ...d.settings.vote, open: !!o.open }; } },
   "pitch.add": { roles: ADMIN, run(d, o) { d.pitches.push({ id: o.id || newId("P", allIds(d)), name: o.name, stream: { url: null, on: false, label: "" } }); } },
   "pitch.edit": { roles: ADMIN, run(d, o) { const p = d.pitches.find((x) => x.id === o.id); if (!p) return "Pitch not found."; Object.assign(p, pick(o, ["name"])); } },
@@ -241,11 +242,11 @@ export const OPS = {
   "fixture.remove": { roles: ADMIN, run(d, o) { d.fixtures = d.fixtures.filter((f) => f.id !== o.id); } },
   "bout.add": { roles: ADMIN, run(d, o) {
     const order = Math.max(0, ...(d.card.bouts || []).map((b) => b.order)) + 1;
-    d.card.bouts.push({ id: o.id || newId("B", allIds(d)), order, title: o.title || "", weight: o.weight || "", rounds: o.rounds || 3, roundMins: o.roundMins || 2, scoring: o.scoring || "judges", judges: o.judges || [], red: { name: o.red?.name, club: o.red?.club || "" }, blue: { name: o.blue?.name, club: o.blue?.club || "" }, state: "scheduled", round: 0, result: null });
+    d.card.bouts.push({ id: o.id || newId("B", allIds(d)), order, title: o.title || "", weight: o.weight || "", rounds: o.rounds || 3, roundMins: o.roundMins || 2, scoring: o.scoring || "judges", judges: o.judges || [], red: { name: o.red?.name, club: o.red?.club || "" }, blue: { name: o.blue?.name, club: o.blue?.club || "" }, state: "scheduled", round: 0, result: null, ...(o.pitch ? { pitch: o.pitch } : {}) });
   } },
   "bout.edit": { roles: ADMIN, run(d, o) {
     const b = bout(d, o.id); if (!b) return "Bout not found.";
-    Object.assign(b, pick(o, ["order", "title", "weight", "rounds", "roundMins", "scoring", "judges"]));
+    Object.assign(b, pick(o, ["order", "title", "weight", "rounds", "roundMins", "scoring", "judges", "pitch"]));
     if (o.red) b.red = { ...b.red, ...pick(o.red, ["name", "club"]) };
     if (o.blue) b.blue = { ...b.blue, ...pick(o.blue, ["name", "club"]) };
   } },

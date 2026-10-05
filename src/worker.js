@@ -134,6 +134,15 @@ async function register(env, request, row, now) {
 
 // ---------------------------------------------------------------- staff
 
+// A private demo's logo, kept with the demo on the server rather than anywhere public.
+const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
+function logo(row) {
+  const l = row.doc.private && row.doc.private.demo && row.doc.private.demo.overrides && row.doc.private.demo.overrides.logoData;
+  if (!l || !LOGO_TYPES.includes(l.type) || typeof l.b64 !== "string") return fail(404, "No logo for this event.");
+  const bytes = Uint8Array.from(atob(l.b64), (ch) => ch.charCodeAt(0));
+  return new Response(bytes, { headers: { "Content-Type": l.type, "Cache-Control": "public, max-age=3600", "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'" } });
+}
+
 async function fullView(env, row, actor) {
   let counts;
   if (actor.role === "admin") {
@@ -389,6 +398,7 @@ async function api(request, env, url, now) {
     if (c === "votes" && !d) { allow("GET", "POST"); return m === "GET" ? votesGet(env, row, now) : votesPost(env, request, row, now); }
     if (c === "register" && !d) { allow("POST"); return register(env, request, row, now); }
     if (c === "full" && !d) { allow("GET"); return full(env, request, url, row, now); }
+    if (c === "logo" && !d) { allow("GET"); return logo(row); }
     if (c === "codes") {
       await staffActor(env, request, row, ["admin"], now);
       if (!d) { allow("GET", "POST"); return m === "GET" ? codesList(env, row) : codesCreate(env, request, row, now); }

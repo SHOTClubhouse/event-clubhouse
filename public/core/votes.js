@@ -25,7 +25,8 @@ export const VOTER = /^[A-Za-z0-9_-]{16,64}$/;
 const SHOWN = 12;
 
 const lockMs = (doc) => (doc.settings.lockSecs ?? 60) * 1000;
-export const isOpen = (doc) => !!(doc && doc.settings && doc.settings.vote && doc.settings.vote.open === true);
+// A juniors event never has a fan vote, whatever the switch says: under-18s aren't voted on.
+export const isOpen = (doc) => !!(doc && doc.settings && !doc.settings.juniors && doc.settings.vote && doc.settings.vote.open === true);
 
 // ---- Football ----
 function divisionOf(doc, f) { return doc.divisions.find((d) => d.id === f.division) || null; }

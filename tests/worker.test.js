@@ -779,3 +779,62 @@ test("the fitness simulation copes with an organiser's edits mid-run", () => {
   }
   assert.ok(doc.comp.heats.filter((h) => h.state !== "scheduled").length >= 7);
 });
+
+test("a two-ring juniors card runs a bout in each ring at once, with no fan votes", () => {
+  const start = Date.parse("2026-10-05T09:00:00Z");
+  const recipe = { name: "Junior Championships", rings: ["Ring A", "Ring B"], juniors: true, judges: 3, bouts: Array.from({ length: 6 }, (_, i) => ({ title: `Bout ${i + 1}`, rounds: 3, roundMins: 2 })) };
+  let { doc } = buildDemo("fight-night", start, { slug: "p-ringringri", name: "Junior Champs", accent: "#d02045", recipe });
+  assert.deepEqual(validate(doc), []);
+  assert.deepEqual(doc.card.bouts.map((b) => b.pitch), ["P1", "P2", "P1", "P2", "P1", "P2"]);
+  assert.deepEqual(codesFor(doc).filter((c) => c.role === "referee").map((c) => c.label), ["Referee, Ring A", "Referee, Ring B"]);
+  const rand = rng(77);
+  let both = false, votes = 0, errors = 0;
+  for (let t = start; t < start + 60 * 60000; t += 20000) {
+    const r = runStep(doc, t, rand);
+    if (r.reset) break;
+    errors += r.errors.length;
+    votes += r.votes.length;
+    doc = r.doc;
+    const live = doc.card.bouts.filter((b) => b.state === "live" || b.state === "break");
+    assert.ok(live.length <= 2);
+    assert.ok(new Set(live.map((b) => b.pitch)).size === live.length, "never two bouts at once in one ring");
+    if (live.length === 2) both = true;
+  }
+  assert.equal(errors, 0);
+  assert.ok(both, "both rings were busy at the same time");
+  assert.equal(votes, 0);
+  assert.ok(doc.card.bouts.filter((b) => b.state === "done").length >= 4);
+});
+
+test("a recipe with several divisions shares the pitches and keeps every game id unique", () => {
+  const now = Date.parse("2026-10-05T10:00:00Z");
+  const t = (p, n) => Array.from({ length: n }, (_, i) => `${p} ${i + 1}`);
+  const recipe = { divisions: [{ name: "Draw A", teams: t("North", 16), format: "knockout" }, { name: "Draw B", teams: t("South", 16), format: "knockout" }], pitches: ["Pitch 1", "Pitch 2", "Pitch 3", "Pitch 4"], gameMins: 12, thirdPlace: false };
+  const { doc } = buildDemo("beach-soccer-cup", now, { slug: "p-drawdrawdr", name: "Cup", accent: "#e8f21d", recipe });
+  assert.deepEqual(validate(doc), []);
+  assert.deepEqual(doc.divisions.map((v) => [v.name, v.teams.length]), [["Draw A", 16], ["Draw B", 16]]);
+  assert.equal(new Set(doc.fixtures.map((f) => f.id)).size, doc.fixtures.length);
+  assert.equal(doc.fixtures.length, 30);
+  const pitchesOf = (id) => new Set(doc.fixtures.filter((f) => f.division === id).map((f) => f.pitch));
+  assert.deepEqual([...pitchesOf("D1")].sort(), ["P1", "P3"]);
+  assert.deepEqual([...pitchesOf("D2")].sort(), ["P2", "P4"]);
+  // the sim plays a knockout draw through to its final
+  let d = doc; const rand = rng(5);
+  for (let at = now; at < now + 4 * 60 * 60000; at += 20000) { const r = runStep(d, at, rand); if (r.reset) break; assert.equal(r.errors.length, 0); d = r.doc; }
+  assert.ok(d.fixtures.filter((f) => f.stage === "Final").every((f) => f.state === "ft"), "both finals played");
+});
+
+test("every demo carries a clubhouse preview with no prices, and juniors demos have no personal posts", () => {
+  const now = Date.parse("2026-10-05T10:00:00Z");
+  for (const key of SEED_ORDER) {
+    const { doc } = buildDemo(key, now);
+    assert.equal(doc.clubhouse.on, true, key);
+    assert.ok(doc.clubhouse.tiers.every((t) => t.price === null), key);
+    assert.match(doc.clubhouse.culture.playlist, /^https:\/\/open\.spotify\.com\//);
+  }
+  const j = buildDemo("beach-soccer-cup", now, { slug: "p-juniorjuni", name: "U14 Cup", accent: "#e4232b", recipe: { juniors: true, clubhouse: { intro: "Our clubhouse." } } }).doc;
+  assert.equal(j.clubhouse.intro, "Our clubhouse.");
+  assert.ok(j.clubhouse.community.posts.every((p) => p.who === "Organiser" || p.who === "Sandstorm"));
+  assert.ok(!JSON.stringify(j.clubhouse).includes("person"));
+  assert.match(CSP, /frame-src[^;]*https:\/\/open\.spotify\.com/);
+});

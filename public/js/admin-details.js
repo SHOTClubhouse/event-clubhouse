@@ -1,6 +1,7 @@
 // Details: name, date, venue, about, look (accent, logo, partner), links and the rules of the day.
 
 import { h, field, input, textarea, select, btn, msgBox, showMsg, withBusy, plainError } from "./admin-lib.js";
+import { terms } from "../core/model.js";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const HTTPS = /^https:\/\/[^\s"'<>]+$/;
@@ -37,6 +38,11 @@ export function details(ctx) {
   const loss = input({ type: "number", min: "0", max: "10", inputmode: "numeric", value: String(ev.settings.points.loss) });
   const cards = select([["after", "After the bout is decided"], ["live", "As each round is scored"], ["never", "Never"]], ev.settings.showCards || "after");
 
+  const tm = terms(ev);
+  const place = select([["pitch", "Pitch"], ["court", "Court"], ["cage", "Cage"], ["ring", "Ring"], ["arena", "Arena"]], tm.place);
+  const scored = select([["goal", "Goals"], ["point", "Points"]], tm.score);
+  const discipline = input({ value: tm.discipline, maxlength: "30", placeholder: football ? "Futsal" : "White-collar boxing" });
+
   // Live preview of the event's look
   const preview = h("div", { class: "ecx-preview", role: "img", "aria-label": "Preview of how the event looks to fans" });
   const drawPreview = () => {
@@ -68,6 +74,7 @@ export function details(ctx) {
       links: { tickets: val(tickets) || null, clubhouse: val(clubhouse) || null },
     }, {
       op: "settings.set", lockSecs: Number(lock.value), ...(football ? { voteBy: voteBy.value, points: { win: Number(win.value), draw: Number(draw.value), loss: Number(loss.value) } } : { showCards: cards.value }),
+      terms: { ...(football ? { place: place.value, score: scored.value } : {}), discipline: val(discipline) },
     }];
     if (lock.value === "") { showMsg(msg, "Vote lock: type a number of seconds from 0 to 600."); lock.focus(); return; }
     const go = e.submitter || form.querySelector("button[type=submit]");
@@ -104,6 +111,13 @@ export function details(ctx) {
         football ? field("Points for a draw", draw) : null,
         football ? field("Points for a loss", loss) : null,
         football ? null : field("Judges' cards show", cards, "Keep cards private until each bout is decided, or show them as rounds are scored."))),
+
+    h("section", { class: "ec-card ecx-stack", "aria-labelledby": "h-words" },
+      h("h3", { class: "ec-d3", id: "h-words", text: "Words" }),
+      h("div", { class: "ecx-fields" },
+        football ? field("Games are played on a", place, "Fans, referees and the big screen use this word.") : null,
+        football ? field("Games are scored in", scored, "Goals or points, in scores and tables.") : null,
+        field("Sport shown to fans (optional)", discipline, "Up to 30 characters. Shows by the date on the fan page."))),
 
     msg,
     h("div", { class: "ec-bar ecx-savebar" },

@@ -258,44 +258,57 @@ function judgeScore(rand, roundWinner) {
   return w === "red" ? [10, low] : [low, 10];
 }
 
+// A card with several rings (amateur championships) runs one bout at a time in each ring; a card
+// without rings is one ring, kept in sim itself as before.
 function boxing(doc, now, rand, out) {
   const { sim } = out;
   const bouts = [...doc.card.bouts].sort((a, b) => a.order - b.order);
   if (!bouts.length || bouts.every((b) => b.state === "done")) { finished(out, now, rand); return; }
-  const referee = doc.officials.find((o) => o.role === "referee");
-  const ref = referee ? { role: "referee", id: referee.id } : ADMIN;
-  const cur = bouts.find((b) => b.state === "live" || b.state === "break");
+  const rings = doc.pitches.length > 1 ? doc.pitches.map((p) => p.id) : [null];
+  const runs = rings.map((rid) => {
+    const st = rid === null ? sim : ((sim.rings ||= {})[rid] ||= {});
+    const official = doc.officials.find((o) => o.role === "referee" && (rid === null || o.pitch === rid)) || doc.officials.find((o) => o.role === "referee");
+    const mine = rid === null ? bouts : bouts.filter((b) => (b.pitch || rings[0]) === rid);
+    return { st, mine, ref: official ? { role: "referee", id: official.id } : ADMIN };
+  });
 
   // fan votes on rounds that are open right now
   openTargets(doc, now).filter((t) => t.kind === "round").forEach((t) => {
-    const planned = sim.plan && sim.cur === t.bout ? sim.plan : null;
+    const run = runs.find((x) => x.st.plan && x.st.cur === t.bout);
+    const planned = run ? run.st.plan : null;
     const lean = planned ? (planned.rw[t.round] || planned.winner) : pick(rand, ["red", "blue"]);
     for (let i = between(rand, 1, 3); i > 0; i--) {
       out.votes.push({ voter: simVoter(rand), target: t.target, choice: rand() < 0.7 ? lean : other(lean), reason: rand() < 0.2 ? null : pick(rand, REASONS), ip_hash: "sim", at: now });
     }
   });
+  runs.forEach((run) => { if (run.mine.some((b) => b.state !== "done")) ring(doc, run.mine, run.st, run.ref, now, rand, out); });
+}
+
+// One ring: start the next bout, run its rounds, collect the cards, give the result.
+function ring(doc, bouts, st, ref, now, rand, out) {
+  const cur = bouts.find((b) => b.state === "live" || b.state === "break");
 
   if (!cur) {
-    sim.cur = null; sim.plan = null;
-    if (now < (sim.idleUntil || 0)) return;
+    st.cur = null; st.plan = null;
+    if (now < (st.idleUntil || 0)) return;
     const next = bouts.find((b) => b.state === "scheduled");
     if (!next) return;
-    sim.cur = next.id;
-    sim.plan = planBout(next, rand);
-    beginRound(sim.plan, next, 1, now, rand);
+    st.cur = next.id;
+    st.plan = planBout(next, rand);
+    beginRound(st.plan, next, 1, now, rand);
     out.batches.push({ actor: ref, ops: [{ op: "bout.action", id: next.id, action: "start" }] });
     progress(out, now);
     return;
   }
 
-  if (sim.cur !== cur.id || !sim.plan) { // picked up part-way through (for example after an organiser edit)
-    sim.cur = cur.id;
-    sim.plan = planBout(cur, rand);
-    if (cur.state === "live") beginRound(sim.plan, cur, cur.round, now, rand); else sim.plan.breakEndAt = now + 10000;
+  if (st.cur !== cur.id || !st.plan) { // picked up part-way through (for example after an organiser edit)
+    st.cur = cur.id;
+    st.plan = planBout(cur, rand);
+    if (cur.state === "live") beginRound(st.plan, cur, cur.round, now, rand); else st.plan.breakEndAt = now + 10000;
   }
-  const plan = sim.plan;
+  const plan = st.plan;
   const r = cur.round;
-  const done = () => { sim.cur = null; sim.plan = null; sim.idleUntil = now + between(rand, 30, 50) * 1000; progress(out, now); };
+  const done = () => { st.cur = null; st.plan = null; st.idleUntil = now + between(rand, 30, 50) * 1000; progress(out, now); };
 
   if (cur.state === "live") {
     if (plan.stopAt && now >= plan.stopAt) {

@@ -1,5 +1,6 @@
 // Overview: counts, phase switch, quick links and QR code, and the "today" checklist.
 
+import { terms } from "../core/model.js";
 import { h, btn, copyText, plural } from "./admin-lib.js";
 
 const QR_SRC = "https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js";
@@ -32,14 +33,14 @@ export function qrImage(url, label) {
   return box;
 }
 
-const PHASES = [
+const phases = (T) => [
   ["pre", "Before", "Fans see the event page: teams and fixtures, or the fight card. They can pre-register and follow the link to your tickets. Scores stay quiet."],
-  ["live", "Live", "Fans see live scores on every pitch, tables, knockouts that fill themselves in, streams and the big screen. Voting works when you switch it on."],
+  ["live", "Live", "Fans see live scores on every ${T.place}, tables, knockouts that fill themselves in, streams and the big screen. Voting works when you switch it on."],
   ["post", "After", "Fans see results, champions, fan-vote winners and your updates, and are invited to join the clubhouse."],
 ];
 
 export function checklist(ctx) {
-  const ev = ctx.event, football = ev.sport === "football";
+  const ev = ctx.event, football = ev.sport === "football", T = terms(ev);
   const teams = ev.divisions.reduce((n, d) => n + d.teams.length, 0);
   const codes = ctx.codes ? ctx.codes.filter((c) => !c.revoked && c.role !== "admin").length : null;
   const streams = !!(ev.stream && ev.stream.url) || (ev.pitches || []).some((p) => p.stream && p.stream.url);
@@ -47,7 +48,7 @@ export function checklist(ctx) {
   const judges = ev.officials.filter((o) => o.role === "judge").length;
   const items = football ? [
     { done: teams >= 2, label: "Teams added", hint: `${plural(teams, "team")} so far. You need at least two.`, tab: "teams" },
-    { done: ev.pitches.length >= 1 && refs >= 1, label: "Pitches and referees added", hint: `${plural(ev.pitches.length, "pitch", "pitches")} and ${plural(refs, "referee")}.`, tab: "officials" },
+    { done: ev.pitches.length >= 1 && refs >= 1, label: `${T.Places} and referees added`, hint: `${plural(ev.pitches.length, T.place, T.places)} and ${plural(refs, "referee")}.`, tab: "officials" },
     { done: ev.fixtures.length >= 1, label: "Fixtures made", hint: ev.fixtures.length ? `${plural(ev.fixtures.length, "game")} in the schedule.` : "Use the generator to make the schedule.", tab: "fixtures" },
   ] : [
     { done: ev.card.bouts.length >= 1, label: "Bouts on the card", hint: `${plural(ev.card.bouts.length, "bout")} so far.`, tab: "card" },
@@ -72,7 +73,7 @@ export function overview(ctx) {
   const items = checklist(ctx);
   const ready = items.filter((i) => i.done).length;
 
-  const phase = h("div", { class: "ecx-phase", role: "group", "aria-label": "Event phase" }, PHASES.map(([id, name, text]) =>
+  const phase = h("div", { class: "ecx-phase", role: "group", "aria-label": "Event phase" }, phases(terms(ev)).map(([id, name, text]) =>
     h("button", { type: "button", class: "ecx-phase__opt", "aria-pressed": String(ev.phase === id), key: `phase-${id}`, onclick: async () => {
       if (ev.phase === id) return;
       const r = await ctx.save([{ op: "phase.set", phase: id }], { success: `Event is now ${name.toLowerCase()}.` });
