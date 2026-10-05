@@ -108,8 +108,8 @@ export const withPrivate = (doc, seed) => { doc.private = { demo: { seed } }; re
 // A recipe changes only the parts of a seed listed here (names, format, timings, wording), so
 // it can never change what a demo is. Each seed merges a recipe over its own defaults.
 export const RECIPE_KEYS = {
-  football: ["name", "venue", "about", "teams", "divisions", "division", "format", "groups", "advance", "thirdPlace", "gameMins", "gapMins", "pitches", "voteBy", "terms", "squad", "juniors"],
-  boxing: ["name", "venue", "about", "bouts", "judges", "terms", "clubs", "rings", "juniors"],
+  football: ["clubhouse", "name", "venue", "about", "teams", "divisions", "division", "format", "groups", "advance", "thirdPlace", "gameMins", "gapMins", "pitches", "voteBy", "terms", "squad", "juniors"],
+  boxing: ["clubhouse", "name", "venue", "about", "bouts", "judges", "terms", "clubs", "rings", "juniors"],
 };
 
 export function recipeOf(kind, r) {

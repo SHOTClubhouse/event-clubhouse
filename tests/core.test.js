@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { blankEvent, validate, publicView, playerLabel, streamInfo, addMins, consentText, terms } from "../public/core/model.js";
+import { blankEvent, validate, publicView, playerLabel, streamInfo, addMins, consentText, terms, spotifyEmbed } from "../public/core/model.js";
 import { generate, roundRobin, snakeGroups, seedOrder, bracket, checkOptions } from "../public/core/generator.js";
 import { standings, resolve, champion, winnerOf, tables } from "../public/core/standings.js";
 import { decision, judgeCard, cardsComplete, resultText, nextState } from "../public/core/boxing.js";
@@ -399,4 +399,19 @@ test("a juniors event shows team names only, boxers by first name, and never ope
   assert.ok(!JSON.stringify(pb).includes("Stone"));
   d.settings.juniors = "yes";
   assert.ok(validate(d).some((e) => /juniors/.test(e)));
+});
+
+test("the clubhouse: checked when saved, Spotify links only, set by the organiser", () => {
+  const d = blankEvent({ slug: "x-cup", name: "X Cup" });
+  const club = { on: true, intro: "All year.", members: 0, tiers: [{ id: "M1", name: "Member", benefits: ["Early tickets"], price: null }], culture: { playlist: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", lineup: [{ time: null, name: "DJ One", role: "DJ" }], drops: [] }, community: { posts: [{ id: "W1", who: "Organiser", text: "Photos are up.", kind: "photo", ago: "2h" }], next: [{ date: "2026-11-01", title: "Next one", where: "Here" }] }, rewards: [{ id: "B1", name: "Founding fan", how: "register", text: "Registered early" }] };
+  d.clubhouse = club;
+  assert.deepEqual(validate(d), []);
+  assert.equal(spotifyEmbed(club.culture.playlist), "https://open.spotify.com/embed/playlist/37i9dQZF1DXcBWIGoYBM5M");
+  assert.equal(spotifyEmbed("https://evil.example/playlist/37i9dQZF1DXcBWIGoYBM5M"), null);
+  for (const bad of [{ culture: { playlist: "https://example.com/x" } }, { tiers: [{ id: "M1", name: "", benefits: [] }] }, { rewards: [{ id: "B1", name: "X", how: "pay" }] }, { culture: { lineup: [{ name: "X", role: "Headliner" }] } }]) {
+    assert.ok(validate({ ...d, clubhouse: { ...club, ...bad } }).length > 0, JSON.stringify(bad));
+  }
+  assert.equal(applyOps(d, [{ op: "clubhouse.set", clubhouse: { ...club, intro: "Changed" } }], { role: "admin", id: null }).doc.clubhouse.intro, "Changed");
+  assert.equal(applyOps(d, [{ op: "clubhouse.set", clubhouse: club }], { role: "referee", id: "R1" }).status, 403);
+  assert.equal(publicView(d).clubhouse.tiers[0].price, null);
 });

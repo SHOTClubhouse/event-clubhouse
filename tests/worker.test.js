@@ -529,3 +529,18 @@ test("a recipe with several divisions shares the pitches and keeps every game id
   for (let at = now; at < now + 4 * 60 * 60000; at += 20000) { const r = runStep(d, at, rand); if (r.reset) break; assert.equal(r.errors.length, 0); d = r.doc; }
   assert.ok(d.fixtures.filter((f) => f.stage === "Final").every((f) => f.state === "ft"), "both finals played");
 });
+
+test("every demo carries a clubhouse preview with no prices, and juniors demos have no personal posts", () => {
+  const now = Date.parse("2026-10-05T10:00:00Z");
+  for (const key of SEED_ORDER) {
+    const { doc } = buildDemo(key, now);
+    assert.equal(doc.clubhouse.on, true, key);
+    assert.ok(doc.clubhouse.tiers.every((t) => t.price === null), key);
+    assert.match(doc.clubhouse.culture.playlist, /^https:\/\/open\.spotify\.com\//);
+  }
+  const j = buildDemo("beach-soccer-cup", now, { slug: "p-juniorjuni", name: "U14 Cup", accent: "#e4232b", recipe: { juniors: true, clubhouse: { intro: "Our clubhouse." } } }).doc;
+  assert.equal(j.clubhouse.intro, "Our clubhouse.");
+  assert.ok(j.clubhouse.community.posts.every((p) => p.who === "Organiser" || p.who === "Sandstorm"));
+  assert.ok(!JSON.stringify(j.clubhouse).includes("person"));
+  assert.match(CSP, /frame-src[^;]*https:\/\/open\.spotify\.com/);
+});

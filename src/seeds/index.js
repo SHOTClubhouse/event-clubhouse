@@ -2,6 +2,7 @@
 // nightly reset, simulation reset) and by scripts/seed.js and scripts/prospect.js.
 
 import { check } from "./lib.js";
+import { demoClubhouse } from "./clubhouse.js";
 import { insertVoteStatements } from "../votes.js";
 import beach from "./beach-soccer-cup.js";
 import futsal from "./futsal-finals.js";
@@ -16,7 +17,10 @@ export const SEED_ORDER = [beach.slug, futsal.slug, sixes.slug, fight.slug];
 export function buildDemo(key, now, overrides = null) {
   const seed = SEEDS[key];
   if (!seed) throw new Error(`No demo seed called ${key}`);
-  const doc = seed.build(now, (overrides && overrides.recipe) || {});
+  const recipe = (overrides && overrides.recipe) || {};
+  const doc = seed.build(now, recipe);
+  // every demo carries a clubhouse preview; a recipe can replace any part of it
+  doc.clubhouse = demoClubhouse(seed.kind, doc, recipe.clubhouse || null);
   if (overrides) {
     if (overrides.slug) doc.slug = overrides.slug;
     if (overrides.name) doc.name = overrides.name;

@@ -122,6 +122,7 @@ export const OPS = {
     if (o.voteBy !== undefined && !VOTE_BY.includes(o.voteBy)) return "Show players by number, name or both.";
     Object.assign(d.settings, pick(o, ["voteBy", "lockSecs", "points", "showCards", "terms", "juniors"]));
   } },
+  "clubhouse.set": { roles: ADMIN, run(d, o) { if (!o.clubhouse || typeof o.clubhouse !== "object") return "Send the clubhouse."; d.clubhouse = o.clubhouse; } },
   "vote.open": { roles: ADMIN, run(d, o) { d.settings.vote = { ...d.settings.vote, open: !!o.open }; } },
   "pitch.add": { roles: ADMIN, run(d, o) { d.pitches.push({ id: o.id || newId("P", allIds(d)), name: o.name, stream: { url: null, on: false, label: "" } }); } },
   "pitch.edit": { roles: ADMIN, run(d, o) { const p = d.pitches.find((x) => x.id === o.id); if (!p) return "Pitch not found."; Object.assign(p, pick(o, ["name"])); } },

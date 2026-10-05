@@ -196,6 +196,7 @@ function check(doc) {
       });
     });
   });
+  if (d.clubhouse != null) errs.push(...clubhouseErrors(d.clubhouse));
   (Array.isArray(d.updates) ? d.updates : errs.push("updates missing") && []).forEach((u) => {
     if (!ID.test(u.id || "")) errs.push(`update ${u.id}: missing id`);
     if (!text(u.title, 120) || !optText(u.body, 2000) || !optUrl(u.link)) errs.push(`update ${u.id}: title up to 120, body up to 2000, link https`);
@@ -298,6 +299,46 @@ export function streamInfo(s) {
 // registration, both from here, so what was shown and what was recorded can never differ.
 // The organiser names themselves through theme.partner; otherwise the event name stands in.
 export const consentText = (doc) => `${(doc.theme && doc.theme.partner) || doc.name} and SHOT Clubhouse can email me about ${doc.name}, future events and the clubhouse. I can unsubscribe at any time.`;
+
+// ---- The event's clubhouse (docs/CLUBHOUSE.md) ----
+export const SPOTIFY = /^https:\/\/open\.spotify\.com\/(playlist|album|artist|show)\/([A-Za-z0-9]{10,40})(\?.*)?$/;
+export const LINEUP_ROLES = ["DJ", "Live", "MC", "Host", "Artist"];
+export const REWARD_HOWS = ["register", "vote", "attend", "streak", "share"];
+export const spotifyEmbed = (url) => { const m = typeof url === "string" && url.match(SPOTIFY); return m ? `https://open.spotify.com/embed/${m[1]}/${m[2]}` : null; };
+
+function clubhouseErrors(c) {
+  const e = [];
+  if (typeof c !== "object" || Array.isArray(c)) return ["clubhouse: an object"];
+  const list = (v, max, at) => (v == null ? [] : Array.isArray(v) && v.length <= max ? v : (e.push(`${at}: up to ${max}`), []));
+  const ids = (arr, at) => { const seen = new Set(); arr.forEach((x) => { if (!x || !ID.test(x.id || "") || seen.has(x.id)) e.push(`${at} ${x && x.id}: missing or duplicate id`); else seen.add(x.id); }); };
+  if (typeof c.on !== "boolean") e.push("clubhouse.on: true or false");
+  if (!optText(c.intro, 300)) e.push("clubhouse.intro: up to 300 characters");
+  if (c.members != null && !(Number.isInteger(c.members) && c.members >= 0 && c.members <= 10000000)) e.push("clubhouse.members: a whole number");
+  const tiers = list(c.tiers, 4, "clubhouse.tiers");
+  ids(tiers, "tier");
+  tiers.forEach((t) => {
+    if (!t || !text(t.name, 60)) e.push(`tier ${t && t.id}: name 1 to 60 characters`);
+    if (t && !(Array.isArray(t.benefits) && t.benefits.length <= 8 && t.benefits.every((b) => text(b, 80)))) e.push(`tier ${t.id}: up to 8 benefits of 80 characters`);
+    if (t && !optText(t.price, 30)) e.push(`tier ${t.id}: price up to 30 characters, or none`);
+  });
+  const cu = c.culture || {};
+  if (cu.playlist != null && cu.playlist !== "" && !SPOTIFY.test(cu.playlist)) e.push("clubhouse.culture.playlist: a Spotify playlist, album, artist or show link");
+  list(cu.lineup, 12, "clubhouse.culture.lineup").forEach((x, i) => {
+    if (!x || !text(x.name, 60) || !LINEUP_ROLES.includes(x.role) || !(x.time == null || TIME.test(x.time))) e.push(`line-up ${i + 1}: a name, a role (${LINEUP_ROLES.join(", ")}) and an optional HH:MM`);
+  });
+  const drops = list(cu.drops, 6, "clubhouse.culture.drops");
+  ids(drops, "drop");
+  drops.forEach((x) => { if (x && (!text(x.title, 60) || !optText(x.body, 300) || !optText(x.when, 30))) e.push(`drop ${x.id}: title up to 60, text up to 300`); });
+  const co = c.community || {};
+  const posts = list(co.posts, 12, "clubhouse.community.posts");
+  ids(posts, "post");
+  posts.forEach((x) => { if (x && (!text(x.who, 60) || !text(x.text, 300) || !["post", "photo", "shoutout"].includes(x.kind) || !optText(x.ago, 20))) e.push(`post ${x.id}: who, text up to 300 and a kind`); });
+  list(co.next, 6, "clubhouse.community.next").forEach((x, i) => { if (!x || !DATE.test(x.date || "") || !text(x.title, 80) || !optText(x.where, 80)) e.push(`next ${i + 1}: a date, a title and an optional place`); });
+  const rewards = list(c.rewards, 8, "clubhouse.rewards");
+  ids(rewards, "reward");
+  rewards.forEach((x) => { if (x && (!text(x.name, 60) || !REWARD_HOWS.includes(x.how) || !optText(x.text, 120))) e.push(`reward ${x.id}: a name and how it's earned (${REWARD_HOWS.join(", ")})`); });
+  return e;
+}
 
 // ---- Words ----
 // terms(doc).place is "pitch", .places "pitches", .Place "Pitch"; .score "goal", .Score "Goal",
