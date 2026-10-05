@@ -11,6 +11,7 @@
 
 import { validate, newId, ID, STATES, PHASES, VOTE_BY, METHODS, mustScore, RANKINGS, ENTRY_STATES, MAX_RESULT } from "./model.js";
 import { nextState, decision, cardsComplete } from "./boxing.js";
+import { resolve } from "./standings.js";
 
 const ADMIN = ["admin"];
 const OFFICIAL = ["admin", "referee"];
@@ -97,17 +98,45 @@ export const OPS = {
   } },
 
   // ---- On the day: football ----
-  "fixture.score": { roles: OFFICIAL, run(d, o) {
+  "fixture.score": { roles: OFFICIAL, run(d, o, a, now) {
     const f = fixture(d, o.id); if (!f) return "Game not found.";
     f.homeScore = o.home; f.awayScore = o.away;
-    if (f.state === "scheduled") f.state = "live";
+    if (f.state === "scheduled") { f.state = "live"; if (f.startedAt == null) f.startedAt = now; }
     if (f.pens && f.homeScore !== f.awayScore) f.pens = null;
+    trimScorers(f);
+  } },
+  // A goal with its scorer (or null when the referee isn't sure) and the minute of the game.
+  "goal.add": { roles: OFFICIAL, run(d, o, a, now) {
+    const f = fixture(d, o.id); if (!f) return "Game not found.";
+    if (o.side !== "home" && o.side !== "away") return "Pick the side that scored.";
+    if (f.state === "ft") return "This game has finished. Reopen it to add a goal.";
+    if (f.state === "scheduled") { f.state = "live"; f.startedAt = f.startedAt ?? now; }
+    if (f.homeScore == null) { f.homeScore = 0; f.awayScore = 0; }
+    const team = sideTeam(d, f, o.side);
+    let player = null;
+    if (o.player != null) {
+      const t = team && d.divisions.flatMap((v) => v.teams).find((x) => x.id === team);
+      if (!t || !(t.players || []).some((p) => p.id === o.player)) return "That player isn't in this team's squad.";
+      player = o.player;
+    }
+    const min = Number.isInteger(o.min) && o.min >= 0 && o.min <= 200 ? o.min : f.startedAt != null ? Math.min(200, Math.floor((now - f.startedAt) / 60000) + 1) : null;
+    if (o.side === "home") f.homeScore += 1; else f.awayScore += 1;
+    f.goals = [...(f.goals || []), { side: o.side, team: team || null, player, min }];
+    if (f.pens && f.homeScore !== f.awayScore) f.pens = null;
+  } },
+  "goal.undo": { roles: OFFICIAL, run(d, o) {
+    const f = fixture(d, o.id); if (!f) return "Game not found.";
+    if (o.side !== "home" && o.side !== "away") return "Pick the side.";
+    const key = o.side === "home" ? "homeScore" : "awayScore";
+    if (!f[key]) return "There's no goal to take off.";
+    f[key] -= 1;
+    trimScorers(f);
   } },
   "fixture.state": { roles: OFFICIAL, run(d, o, a, now) {
     const f = fixture(d, o.id); if (!f) return "Game not found.";
     if (!STATES.includes(o.state)) return "Unknown state.";
-    if (o.state === "scheduled") { f.homeScore = null; f.awayScore = null; f.pens = null; f.ftAt = null; }
-    if (o.state === "live") { if (f.homeScore == null) { f.homeScore = 0; f.awayScore = 0; } f.ftAt = null; f.pens = null; }
+    if (o.state === "scheduled") { f.homeScore = null; f.awayScore = null; f.pens = null; f.ftAt = null; f.goals = []; f.startedAt = null; }
+    if (o.state === "live") { if (f.homeScore == null) { f.homeScore = 0; f.awayScore = 0; } f.ftAt = null; f.pens = null; if (f.startedAt == null) f.startedAt = now; }
     if (o.state === "ft") { if (f.homeScore == null) { f.homeScore = 0; f.awayScore = 0; } if (f.state !== "ft") f.ftAt = now; }
     f.state = o.state;
   } },
@@ -317,6 +346,20 @@ export const allowed = (role) => Object.keys(OPS).filter((k) => OPS[k].roles.inc
 
 // Every id an op names must be a valid id, checked before the op runs, because ids become object
 // keys (scorecards) and "__proto__" there would reach every object in the process.
+// The team on one side of a game: a team id, or a placeholder ("Winner Semi-final 1") once it resolves.
+function sideTeam(d, f, side) {
+  const div = d.divisions.find((v) => v.id === f.division);
+  if (!div) return null;
+  if (div.teams.some((t) => t.id === f[side])) return f[side];
+  return resolve(div, d.fixtures, f[side], d.settings.points) || null;
+}
+// When a score goes down, the latest scorers for that side go with it.
+function trimScorers(f) {
+  if (!Array.isArray(f.goals)) return;
+  const keep = { home: f.homeScore || 0, away: f.awayScore || 0 };
+  f.goals = f.goals.filter((g) => keep[g.side]-- > 0);
+}
+
 const ID_KEYS = ["id", "division", "judge", "team", "pitch", "ref", "home", "away", "entry", "heat"];
 const RESERVED = /^(__proto__|constructor|prototype)$/;
 const bad = (v) => typeof v === "string" && RESERVED.test(v);

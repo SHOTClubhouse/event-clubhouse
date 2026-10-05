@@ -823,3 +823,40 @@ test("the clubhouse: checked when saved, Spotify links only, set by the organise
   assert.equal(applyOps(d, [{ op: "clubhouse.set", clubhouse: club }], { role: "referee", id: "R1" }).status, 403);
   assert.equal(publicView(d).clubhouse.tiers[0].price, null);
 });
+
+test("goal scorers: added by the referee with the minute, trimmed when a goal comes off, shown by the event's rule", () => {
+  const g = generate({ teams: [{ id: "T1", name: "Ayr" }, { id: "T2", name: "Bute" }], format: "league", start: "10:00", gameMins: 10, pitches: ["P1"], division: "main" });
+  const d = blankEvent({ slug: "x-cup", name: "X Cup" });
+  d.divisions[0].format = "league";
+  d.divisions[0].teams = g.teams.map((t) => ({ ...t, players: [{ id: "p1", number: 9, name: "Sam Brown" }, { id: "p2", number: 4, name: "Kai Reed" }] }));
+  d.fixtures = g.fixtures;
+  d.officials = [{ id: "R1", name: "Ref One", role: "referee", pitch: null }];
+  const ref = { role: "referee", id: "R1" };
+  const id = d.fixtures[0].id;
+  let r = applyOps(d, [{ op: "fixture.state", id, state: "live" }], ref, 0);
+  r = applyOps(r.doc, [{ op: "goal.add", id, side: "home", player: "p1" }], ref, 5 * 60000 + 1000);
+  assert.equal(r.ok, true, r.error);
+  r = applyOps(r.doc, [{ op: "goal.add", id, side: "away" }, { op: "goal.add", id, side: "home", player: "p2", min: 9 }], ref, 7 * 60000);
+  const f = r.doc.fixtures[0];
+  assert.deepEqual([f.homeScore, f.awayScore], [2, 1]);
+  assert.deepEqual(f.goals.map((x) => [x.side, x.player, x.min]), [["home", "p1", 6], ["away", null, 8], ["home", "p2", 9]]);
+  assert.equal(applyOps(r.doc, [{ op: "goal.add", id, side: "home", player: "p9" }], ref, 0).ok, false);
+  assert.equal(applyOps(r.doc, [{ op: "goal.add", id, side: "home" }], { role: "coach", id: "T1" }, 0).status, 403);
+  const pub = publicView({ ...r.doc, settings: { ...r.doc.settings, voteBy: "both" } });
+  assert.deepEqual(pub.fixtures[0].goals.map((x) => x.label || null), ["#9 Sam", null, "#4 Kai"]);
+  assert.ok(!JSON.stringify(pub).includes("Brown"));
+  const junior = publicView({ ...r.doc, settings: { ...r.doc.settings, juniors: true } });
+  assert.ok(junior.fixtures[0].goals.every((x) => x.label === undefined && x.player === undefined));
+  const undone = applyOps(r.doc, [{ op: "goal.undo", id, side: "home" }], ref, 0).doc.fixtures[0];
+  assert.deepEqual([undone.homeScore, undone.goals.map((x) => x.player)], [1, ["p1", null]]);
+  const set = applyOps(r.doc, [{ op: "fixture.score", id, home: 0, away: 1 }], ref, 0).doc.fixtures[0];
+  assert.deepEqual(set.goals.map((x) => x.side), ["away"]);
+  assert.ok(validate({ ...r.doc, fixtures: [{ ...f, goals: [...f.goals, { side: "away", team: null, player: null, min: 1 }] }, ...r.doc.fixtures.slice(1)] }).some((e) => /more away scorers/.test(e)));
+});
+
+test("clubhouse: a Guest line-up role and exclusive drops validate", () => {
+  const d = blankEvent({ slug: "x-cup", name: "X Cup" });
+  const ch = (drops) => ({ on: true, intro: "x", culture: { lineup: [{ time: "19:30", name: "Special guest: a former international", role: "Guest" }], drops } });
+  assert.deepEqual(validate({ ...d, clubhouse: ch([{ id: "K1", title: "Walkout mix", exclusive: true }]) }), []);
+  assert.ok(validate({ ...d, clubhouse: ch([{ id: "K1", title: "X", exclusive: "yes" }]) }).length > 0);
+});

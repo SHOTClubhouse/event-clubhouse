@@ -362,7 +362,7 @@ test("the simulation resets about five minutes after the last game, and after a 
 test("a knockout place that ties on every tie-break is settled by the organiser, so the day never stalls", () => {
   let doc = buildDemo("beach-soccer-cup", NOW).doc;
   // every group game finishes 1-1, so every team ties on points, goal difference and goals
-  doc.fixtures.filter((f) => !f.stage).forEach((f) => { f.homeScore = 1; f.awayScore = 1; f.state = "ft"; });
+  doc.fixtures.filter((f) => !f.stage).forEach((f) => { f.homeScore = 1; f.awayScore = 1; f.goals = []; f.state = "ft"; });
   const s = simStep(doc, NOW, rng(4));
   const edits = s.batches.flatMap((b) => b.ops).filter((o) => o.op === "fixture.edit");
   assert.ok(edits.length >= 4, "the semi-finals get their teams");
@@ -407,7 +407,7 @@ test("a game is timed at the real clock when it starts, and games to come run fo
   const doc = buildDemo("beach-soccer-cup", NOW + minutes(37)).doc; // built 37 minutes later: starts at that time
   const t = NOW + minutes(37);
   const hhmm = londonParts(t).hhmm;
-  assert.equal(doc.fixtures[0].time, hhmm, "the seed starts from now");
+  assert.equal(doc.fixtures.find((f) => f.state === "scheduled").time, hhmm, "the first game still to play starts now");
   const later = t + minutes(90); // London 14:37 in the summer-time offset
   const r = runStep(doc, later, rand);
   assert.deepEqual(r.errors, []);

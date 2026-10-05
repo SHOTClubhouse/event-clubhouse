@@ -31,10 +31,15 @@ export default {
       start: "18:30", gameMins: 8, gapMins: 2,
     });
     const base = Date.parse(`${date}T18:30:00Z`);
+    const div0 = doc.divisions[0];
     doc.fixtures.forEach((f, i) => {
       f.homeScore = between(rand, 0, 3) + (rand() < 0.4 ? between(rand, 0, 2) : 0);
       f.awayScore = between(rand, 0, 3) + (rand() < 0.4 ? between(rand, 0, 2) : 0);
       f.state = "ft";
+      f.goals = [["home", f.home, f.homeScore], ["away", f.away, f.awayScore]].flatMap(([side, id, n]) => Array.from({ length: n }, () => {
+        const players = div0.teams.find((t) => t.id === id).players;
+        return { side, team: id, player: rand() < 0.1 ? null : players[Math.floor(rand() * players.length)].id, min: between(rand, 1, 8) };
+      })).sort((x, y) => x.min - y.min);
       f.ftAt = base + (i + 1) * 10 * 60000 - 120000;
     });
     const div = doc.divisions[0];

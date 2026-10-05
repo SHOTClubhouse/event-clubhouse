@@ -97,6 +97,16 @@ function goalTotal(rand) {
   }
 }
 
+// One goal as a goal.add op: the scorer is picked at random from that team's squad, and about
+// one goal in ten has no scorer (the referee was not sure).
+function goalOp(doc, f, sides, g, ps, rand) {
+  const div = divisionOf(doc, f);
+  const team = div.teams.find((t) => t.id === sides[g.side === "home" ? 0 : 1]);
+  const op = { op: "goal.add", id: f.id, side: g.side, min: 1 + Math.floor(((g.at - ps.startAt) / Math.max(1, ps.endAt - ps.startAt)) * 9) };
+  if (team && team.players && team.players.length && rand() >= 0.1) op.player = pick(rand, team.players).id;
+  return op;
+}
+
 function planGame(f, now, rand) {
   const dur = between(rand, 170, 240) * 1000;
   const total = goalTotal(rand);
@@ -179,7 +189,11 @@ function football(doc, now, rand, out) {
       const home = ps.goals.slice(0, n).filter((g) => g.side === "home").length;
       const away = n - home;
       const ops = [];
-      if (n > ps.applied) { ops.push({ op: "fixture.score", id: cur.id, home, away }); ps.applied = n; progress(out, now); }
+      if (n > ps.applied) {
+        const sides = sidesOf(cur);
+        for (let k = ps.applied; k < n; k++) ops.push(goalOp(doc, cur, sides, ps.goals[k], ps, rand));
+        ps.applied = n; progress(out, now);
+      }
       if (ending) {
         ops.push({ op: "fixture.state", id: cur.id, state: "ft" });
         if (cur.stage && home === away) ops.push({ op: "fixture.pens", id: cur.id, side: rand() < 0.5 ? "home" : "away" });

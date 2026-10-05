@@ -6,6 +6,8 @@ import { blankEvent, validate, toMins, fromMins, RANKINGS, MEASURES, ENTRY_SIZES
 import { generate } from "../../public/core/generator.js";
 import { londonParts } from "../util.js";
 import { addMins } from "../../public/core/model.js";
+import { applyOps } from "../../public/core/ops.js";
+import { resolve, standings } from "../../public/core/standings.js";
 
 // A small seeded random generator (mulberry32), so a seed builds the same way every time.
 export function rng(seed) {
@@ -214,5 +216,110 @@ export function codesFor(doc) {
     out.push({ role: o.role, subject: o.id, label });
   });
   doc.divisions.flatMap((v) => v.teams).slice(0, 2).forEach((t) => out.push({ role: "coach", subject: t.id, label: `Coach, ${t.name}` }));
+  return out;
+}
+
+// ---- Games already played ----
+// Plays the games `want(fixture)` accepts to full time, in order, through the real ops (so every
+// score, scorer and knockout name passes validation). Knockout places are filled from the tables;
+// a place level on every tie-break is picked by table order, as the organiser would. About one
+// goal in ten has no scorer. Returns the document (unchanged if an op is refused).
+export function playPast(doc, now, rand, want) {
+  const admin = { role: "admin", id: null };
+  const points = doc.settings.points;
+  const places = { "1st": 0, "2nd": 1, "3rd": 2, "4th": 3 };
+  const apply = (ops, at) => { const r = applyOps(doc, ops, admin, at); if (r.ok) doc = r.doc; return r.ok; };
+  const real = (div, f, side) => {
+    const ref = f[side];
+    if (div.teams.some((t) => t.id === ref)) return ref;
+    const r = resolve(div, doc.fixtures, ref, points);
+    if (r) return r;
+    const m = typeof ref === "string" && ref.match(/^(1st|2nd|3rd|4th) (?:in table|Group (\S+))$/i);
+    if (!m) return null;
+    const pool = m[2] ? div.teams.filter((t) => String(t.group).toLowerCase() === m[2].toLowerCase()) : div.teams;
+    const ids = new Set(pool.map((t) => t.id));
+    const games = doc.fixtures.filter((g) => g.division === div.id && !g.stage && ids.has(g.home) && ids.has(g.away));
+    if (!games.length || games.some((g) => g.state !== "ft")) return null;
+    const row = standings(pool, games, points)[places[m[1].toLowerCase()]];
+    return row ? row.id : null;
+  };
+  let moved = true;
+  let k = 0;
+  while (moved) {
+    moved = false;
+    for (const f0 of doc.fixtures) {
+      const f = doc.fixtures.find((x) => x.id === f0.id);
+      if (f.state === "ft" || !want(f)) continue;
+      const div = doc.divisions.find((v) => v.id === f.division);
+      const h = real(div, f, "home"), a = real(div, f, "away");
+      if (!h || !a || h === a) continue;
+      // a game whose time is already past is played at that time; any other well before now
+      const ago = minsFrom(now, f.time);
+      const start = ago < 0 ? now + ago * 60000 : now - (200 - k++) * 60000;
+      const fix = [];
+      if (h !== f.home) fix.push({ op: "fixture.edit", id: f.id, home: h });
+      if (a !== f.away) fix.push({ op: "fixture.edit", id: f.id, away: a });
+      if (fix.length && !apply(fix, start)) continue;
+      const total = between(rand, 0, 7);
+      const ops = [{ op: "fixture.state", id: f.id, state: "live" }];
+      const team = (id) => div.teams.find((t) => t.id === id);
+      let home = 0;
+      for (let i = 0; i < total; i++) {
+        const side = rand() < 0.5 ? "home" : "away";
+        if (side === "home") home++;
+        const t = team(side === "home" ? h : a);
+        const g = { op: "goal.add", id: f.id, side, min: 1 + Math.floor(((i + 0.5) / Math.max(1, total)) * 9) };
+        if (t && t.players.length && rand() >= 0.1) g.player = pick(rand, t.players).id;
+        ops.push(g);
+      }
+      ops.push({ op: "fixture.state", id: f.id, state: "ft" });
+      if (f.stage && home * 2 === total) ops.push({ op: "fixture.pens", id: f.id, side: rand() < 0.5 ? "home" : "away" });
+      if (apply(ops, start)) moved = true;
+    }
+  }
+  return doc;
+}
+
+// Minutes from the London clock at `now` to an "HH:MM" time, between -720 and 719.
+function minsFrom(now, hhmm) {
+  const p = londonParts(now);
+  let d = (toMins(hhmm) - (p.hour * 60 + p.minute)) % 1440;
+  if (d < -720) d += 1440;
+  if (d >= 720) d -= 1440;
+  return d;
+}
+
+// ---- A day already under way ----
+// A demo opened at any moment should already have results, a table and names in the knockout.
+// This plays about two in three of the group or league games, always leaving at least two a
+// pitch to play live, and moves the whole schedule so the first game still to play starts now
+// and the played ones sit at their real times earlier in the day.
+export function playEarlier(doc, now, rand) {
+  const after = (f) => (minsFrom(now, f.time) + 1440) % 1440;
+  const games = doc.fixtures.filter((f) => !f.stage).sort((a, b) => after(a) - after(b) || doc.pitches.findIndex((p) => p.id === a.pitch) - doc.pitches.findIndex((p) => p.id === b.pitch));
+  const left = Math.max(doc.pitches.length * 2, Math.ceil(games.length * 0.3));
+  const played = games.slice(0, Math.max(0, games.length - left));
+  if (!played.length) return doc;
+  const shift = after(games[played.length]);
+  doc.fixtures.forEach((f) => { f.time = fromMins(toMins(f.time) - shift); });
+  const ids = new Set(played.map((f) => f.id));
+  return playPast(doc, now, rand, (f) => ids.has(f.id));
+}
+
+// Fan votes for the games already played, so each one has a player of the game. Votes lean
+// towards a few players, the way a crowd does. None on a juniors event.
+export function pastVotes(doc, rand) {
+  if (doc.settings.juniors) return [];
+  const out = [];
+  doc.fixtures.filter((f) => f.state === "ft" && f.ftAt).forEach((f) => {
+    const div = doc.divisions.find((v) => v.id === f.division);
+    const squads = [f.home, f.away].map((id) => div && div.teams.find((t) => t.id === id)).filter((t) => t && t.players && t.players.length);
+    if (!squads.length) return;
+    for (let i = 0, n = between(rand, 6, 24); i < n; i++) {
+      const t = squads[rand() < 0.55 ? 0 : squads.length - 1];
+      const p = t.players[Math.floor(rand() ** 2 * t.players.length)];
+      out.push({ voter: `sim-voter-${String(i + 1).padStart(6, "0")}`, target: `g:${f.id}`, choice: `${t.id}.${p.id}`, reason: null, ip_hash: "sim", at: f.ftAt - 30000 });
+    }
+  });
   return out;
 }

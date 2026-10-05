@@ -14,8 +14,8 @@ doc.clubhouse = {
   ],
   culture: {
     playlist: null | "https://open.spotify.com/playlist/<id>",     // also album, artist, show
-    lineup: [ { time: "HH:MM" | null, name: "DJ ...", role: "DJ" | "Live" | "MC" | "Host" | "Artist" } ],   // 0 to 12
-    drops: [ { id: "K1", title: "Matchday shirt", body: "...", when: "Out now" } ],                        // 0 to 6, merch, content, kit
+    lineup: [ { time: "HH:MM" | null, name: "DJ ...", role: "DJ" | "Live" | "MC" | "Host" | "Artist" | "Guest" } ],   // 0 to 12; "Guest" shows as a special guest card
+    drops: [ { id: "K1", title: "Matchday shirt", body: "...", when: "Out now", exclusive?: true | false } ],  // 0 to 6, merch, content, kit; exclusive shows "Members only"
   },
   community: {
     posts: [ { id: "W1", who: "First name or team", text: "...", kind: "post" | "photo" | "shoutout", ago: "2h" } ],   // 0 to 12, invented in demos

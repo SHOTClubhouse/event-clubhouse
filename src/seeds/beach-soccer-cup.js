@@ -1,7 +1,7 @@
 // Demo: a beach soccer cup that is always live (src/sim.js plays it forward).
 
 import { londonParts } from "../util.js";
-import { footballDoc, startNow, check, withPrivate, recipeOf } from "./lib.js";
+import { footballDoc, startNow, check, withPrivate, recipeOf, playEarlier, pastVotes, rng } from "./lib.js";
 
 const slug = "beach-soccer-cup";
 
@@ -19,7 +19,7 @@ export default {
     { role: "coach", subject: "T2", label: "Coach, Tide Riders", code: "BCHCHAB3T8RN" },
   ],
   build(now, recipe = {}) {
-    const { doc } = footballDoc({
+    const { doc: built } = footballDoc({
       seed: 4101, slug, name: "Beach Soccer Cup", venue: "Seafront Arena",
       about: "Eight teams, two pitches and one trophy. Ten-minute games on the sand, with the knockouts straight after the groups. Follow every game live and vote for your player of the game.",
       accent: "#f7b613", phase: "live", voteBy: "number", voteOpen: true,
@@ -30,8 +30,12 @@ export default {
       ...recipeOf("football", recipe),
       date: londonParts(now).date, start: startNow(now),
     });
+    // the day is already under way: results, a table and names in the knockout from the first look
+    const doc = playEarlier(built, now, rng(4102));
+    doc.settings.streamPreview = true;
+    doc.settings.vote = { open: true };
     doc.updates = [{ id: "U1", at: now, title: "Kick-off", body: "Gates are open and the first games are under way on both pitches.", link: null }];
     return withPrivate(check(doc), slug);
   },
-  votes: () => [],
+  votes: (doc) => pastVotes(doc, rng(4103)),
 };

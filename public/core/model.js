@@ -104,6 +104,7 @@ function check(doc) {
   if (![pts.win, pts.draw, pts.loss].every((n) => Number.isInteger(n) && n >= 0 && n <= 10)) errs.push("settings.points: whole numbers 0 to 10");
   errs.push(...streamErrors(d.stream, "stream"));
   if (s.juniors != null && typeof s.juniors !== "boolean") errs.push("settings.juniors: true or false");
+  if (s.streamPreview != null && typeof s.streamPreview !== "boolean") errs.push("settings.streamPreview: true or false");
   if (s.terms != null) {
     const t = s.terms;
     if (typeof t !== "object" || Array.isArray(t)) errs.push("settings.terms: an object");
@@ -167,6 +168,15 @@ function check(doc) {
     if (hasH !== hasA) errs.push(`${at}: both scores or neither`);
     if ((hasH && !isScore(f.homeScore)) || (hasA && !isScore(f.awayScore))) errs.push(`${at}: scores are whole numbers 0 to 99`);
     if (f.state === "ft" && !hasH) errs.push(`${at}: full time needs a score`);
+    if (f.goals != null) {
+      if (!Array.isArray(f.goals) || f.goals.length > 60) errs.push(`${at}: goals is a list of up to 60`);
+      else {
+        f.goals.forEach((g, i) => {
+          if (!g || !["home", "away"].includes(g.side) || !(g.team == null || ID.test(g.team)) || !(g.player == null || ID.test(g.player)) || !(g.min == null || (Number.isInteger(g.min) && g.min >= 0 && g.min <= 200))) errs.push(`${at} goal ${i + 1}: a side, and an optional team, scorer and minute`);
+        });
+        ["home", "away"].forEach((side) => { if (f.goals.filter((g) => g && g.side === side).length > ((side === "home" ? f.homeScore : f.awayScore) || 0)) errs.push(`${at}: more ${side} scorers than ${side} goals`); });
+      }
+    }
     if (f.pens != null) {
       if (f.pens !== "home" && f.pens !== "away") errs.push(`${at}: penalty winner is home or away`);
       else if (!f.stage || f.state !== "ft" || f.homeScore !== f.awayScore) errs.push(`${at}: only a level knockout game at full time has a penalty winner`);
@@ -352,6 +362,18 @@ export function publicView(doc) {
     t.players = (t.players || []).map((p) => ({ id: p.id, label: playerLabel(p, by), number: by === "name" ? undefined : p.number ?? undefined }));
   }));
   d.officials = d.officials.map((o) => ({ id: o.id, name: firstName(o.name), role: o.role, pitch: o.pitch ?? null }));
+  // Scorers: the public sees each scorer the way the event shows players (number, first name or
+  // both). A juniors event shows the minute only, never a child.
+  d.fixtures.forEach((f) => {
+    if (!Array.isArray(f.goals)) return;
+    f.goals = f.goals.map((g) => {
+      const out = { side: g.side, min: g.min ?? null };
+      if (d.settings.juniors) return out;
+      const team = d.divisions.flatMap((v) => v.teams).find((t) => t.id === g.team);
+      const p = team && (team.players || []).find((x) => x.id === g.player);
+      return p ? { ...out, team: g.team, player: g.player, label: p.label } : { ...out, team: g.team ?? null };
+    });
+  });
   // Juniors: the public sees team names, and boxers by first name and club. No squads at all.
   if (d.settings.juniors) {
     d.divisions.forEach((v) => v.teams.forEach((t) => { t.players = []; }));
@@ -396,7 +418,7 @@ export const consentText = (doc) => `${(doc.theme && doc.theme.partner) || doc.n
 
 // ---- The event's clubhouse (docs/CLUBHOUSE.md) ----
 export const SPOTIFY = /^https:\/\/open\.spotify\.com\/(playlist|album|artist|show)\/([A-Za-z0-9]{10,40})(\?.*)?$/;
-export const LINEUP_ROLES = ["DJ", "Live", "MC", "Host", "Artist"];
+export const LINEUP_ROLES = ["DJ", "Live", "MC", "Host", "Artist", "Guest"];
 export const REWARD_HOWS = ["register", "vote", "attend", "streak", "share"];
 export const spotifyEmbed = (url) => { const m = typeof url === "string" && url.match(SPOTIFY); return m ? `https://open.spotify.com/embed/${m[1]}/${m[2]}` : null; };
 
@@ -423,6 +445,7 @@ function clubhouseErrors(c) {
   const drops = list(cu.drops, 6, "clubhouse.culture.drops");
   ids(drops, "drop");
   drops.forEach((x) => { if (x && (!text(x.title, 60) || !optText(x.body, 300) || !optText(x.when, 30))) e.push(`drop ${x.id}: title up to 60, text up to 300`); });
+  drops.forEach((x) => { if (x && x.exclusive != null && typeof x.exclusive !== "boolean") e.push(`drop ${x.id}: exclusive is true or false`); });
   const co = c.community || {};
   const posts = list(co.posts, 12, "clubhouse.community.posts");
   ids(posts, "post");

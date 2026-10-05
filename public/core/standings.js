@@ -77,10 +77,30 @@ export function resolve(div, fixtures, ref, points, depth = 0) {
 }
 
 // A side's display label: the team name once known, otherwise the placeholder text.
+// Who holds a group or table place right now, before every game in it is played ("1st Group A,
+// so far"). Null when nothing in that group has been played, or the place is level on every
+// tie-break with a neighbour. Only for showing fans; the knockout itself waits for resolve().
+export function leaderSoFar(div, fixtures, ref, points) {
+  const m = typeof ref === "string" && ref.match(/^(1st|2nd|3rd|4th) (?:in table|Group (\S+))$/i);
+  if (!m) return null;
+  const teams = div.teams || [];
+  const pos = PLACES[m[1].toLowerCase()];
+  const pool = m[2] ? teams.filter((t) => String(t.group).toLowerCase() === m[2].toLowerCase()) : teams;
+  const ids = new Set(pool.map((t) => t.id));
+  const games = fixtures.filter((f) => f.division === div.id && !f.stage && ids.has(f.home) && ids.has(f.away));
+  if (pos >= pool.length || !games.some((f) => f.state === "ft")) return null;
+  const t = standings(pool, games.filter((f) => f.state === "ft"), points);
+  const same = (x, y) => x && y && x.pts === y.pts && x.gd === y.gd && x.gf === y.gf;
+  return same(t[pos], t[pos - 1]) || same(t[pos], t[pos + 1]) ? null : t[pos].id;
+}
+
 export function label(div, fixtures, ref, points) {
   const id = resolve(div, fixtures, ref, points);
   const t = id && div.teams.find((x) => x.id === id);
-  return t ? { id: t.id, text: t.name, tbc: false } : { id: null, text: ref, tbc: true };
+  if (t) return { id: t.id, text: t.name, tbc: false };
+  const so = leaderSoFar(div, fixtures, ref, points);
+  const st = so && div.teams.find((x) => x.id === so);
+  return st ? { id: null, text: ref, tbc: true, soFar: st.name } : { id: null, text: ref, tbc: true };
 }
 
 // Who has won a division, if anyone yet. A decided final beats everything; otherwise a fully
