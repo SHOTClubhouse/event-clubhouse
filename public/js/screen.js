@@ -64,7 +64,7 @@ function paintHead() {
   const th = ev.theme || {};
   $("#title").textContent = ev.name;
   document.title = `Big screen | ${ev.name}`;
-  $("#partner").innerHTML = (th.logo ? `<img src="${esc(th.logo)}" alt="${esc(th.partner || ev.name)}">` : "") + (th.partner ? `<span>${esc(th.partner)}</span><i aria-hidden="true">&times;</i>` : "");
+  $("#partner").innerHTML = (th.logo ? `<img src="${esc(th.logo)}" alt="${esc(th.partner || ev.name)}">` : "") + (th.partner ? `${th.logo ? "" : `<span>${esc(th.partner)}</span>`}<i aria-hidden="true">&times;</i>` : "");
   $("#livetag").hidden = ev.phase !== "live";
   $("#phase").textContent = ev.phase === "pre" ? "Coming up" : ev.phase === "post" ? "Full time" : "";
 }

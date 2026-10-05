@@ -2,7 +2,7 @@
 // Opened as /coach/?e=<slug>. The squad editor keeps a draft on the phone until it is saved.
 
 import { ApiError, fullEvent, sendOps, session, sessionsFor, signOut, watchEvent } from "./api.js";
-import { $, applyTheme, esc, officialName, pitchName, plural, side, toast } from "./ui.js";
+import { $, applyTheme, esc, officialName, pitchName, plural, side, stageText, toast } from "./ui.js";
 import { tables, winnerOf } from "../core/standings.js";
 import { terms } from "../core/model.js";
 import { formatCode, signInHtml, trySignIn } from "./ref-auth.js";
@@ -88,7 +88,7 @@ const fmtResult = (f, teamId, event) => {
 function gameLine(event, f, teamId) {
   const homeIsMe = side(event, f, "home").id === teamId;
   const opp = side(event, f, homeIsMe ? "away" : "home");
-  const where = [pitchName(event, f.pitch), f.stage].filter(Boolean).join(" · ");
+  const where = [pitchName(event, f.pitch), stageText(f.stage)].filter(Boolean).join(" · ");
   let right;
   if (f.state === "ft") { const r = fmtResult(f, teamId, event); right = `<span class="ecc-res ecc-res--${r.cls}"><strong>${esc(r.tag)}</strong> ${esc(r.text)}</span>`; }
   else if (f.state === "live") right = `<span class="ec-badge ec-badge--live">Live</span> <strong>${f.homeScore ?? 0}-${f.awayScore ?? 0}</strong>`;
@@ -138,7 +138,7 @@ function knockouts(event, found, mine) {
   return `<ul class="ecc-list">${list.map((f) => {
     const h = side(event, f, "home"), a = side(event, f, "away");
     const sure = mine.includes(f);
-    return `<li class="ecc-ko"><span class="ecc-game__t">${esc(f.time)}</span><span class="ecc-game__m"><strong>${esc(f.stage)}</strong><span class="${h.id === t.id ? "ecc-me" : ""}">${esc(h.text)}</span> <span class="ec-dim">v</span> <span class="${a.id === t.id ? "ecc-me" : ""}">${esc(a.text)}</span><span class="ec-dim ec-small">${esc(pitchName(event, f.pitch))}</span></span><span class="ecc-game__r ec-small ${sure ? "" : "ec-dim"}">${sure ? "You're in" : "If you finish there"}</span></li>`;
+    return `<li class="ecc-ko"><span class="ecc-game__t">${esc(f.time)}</span><span class="ecc-game__m"><strong>${esc(stageText(f.stage))}</strong><span class="${h.id === t.id ? "ecc-me" : ""}">${esc(h.text)}</span> <span class="ec-dim">v</span> <span class="${a.id === t.id ? "ecc-me" : ""}">${esc(a.text)}</span><span class="ec-dim ec-small">${esc(pitchName(event, f.pitch))}</span></span><span class="ecc-game__r ec-small ${sure ? "" : "ec-dim"}">${sure ? "You're in" : "If you finish there"}</span></li>`;
   }).join("")}</ul>`;
 }
 

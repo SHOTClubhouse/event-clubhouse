@@ -1,7 +1,7 @@
 // Big screen slides: each slide is { key, max, build(n) }. build(n) returns HTML for at most n
 // rows, so the fit loop in screen.js can shrink a slide until it fits the TV.
 
-import { esc, side, pitchName } from "/js/ui.js";
+import { esc, side, pitchName, stageText } from "/js/ui.js";
 import { tables, champion, winnerOf } from "/core/standings.js";
 import { currentBout, ringsNow, resultText, decision } from "/core/boxing.js";
 import { fmtDate, byTime, isJuniors, hasRings, ringName } from "/js/event-views.js";
@@ -14,7 +14,7 @@ function card(ev, f, o = {}) {
   const h = side(ev, f, "home"), a = side(ev, f, "away"), w = f.state === "ft" ? winnerOf(f) : null;
   const t = ev.divisions.find((d) => d.id === f.division);
   const g = t && (t.teams.find((x) => x.id === f.home) || {}).group;
-  const meta = [f.state === "live" ? `<span class="ecv-live">Live</span>` : f.state === "ft" ? `<span class="ecv-ft">Full time</span>` : "", `<span>${esc(f.time)}</span>`, f.stage ? `<b>${esc(f.stage)}</b>` : g ? `<span>Group ${esc(g)}</span>` : "", f.pens ? "<span>Won on pens</span>" : ""].filter(Boolean).join("");
+  const meta = [f.state === "live" ? `<span class="ecv-live">Live</span>` : f.state === "ft" ? `<span class="ecv-ft">Full time</span>` : "", `<span>${esc(f.time)}</span>`, f.stage ? `<b>${esc(stageText(f.stage))}</b>` : g ? `<span>Group ${esc(g)}</span>` : "", f.pens ? "<span>Won on pens</span>" : ""].filter(Boolean).join("");
   return `<div class="ecv-game ecv-game--${esc(f.state)}${o.small ? " ecv-game--s" : ""}" data-fx="${esc(f.id)}"><div class="ecv-game__m">${meta}</div><div class="ecv-game__r"><span class="${h.tbc ? "is-tbc " : ""}${w === "home" ? "is-won" : ""}">${esc(h.text)}</span><b class="ecv-sc${f.homeScore == null ? " is-time" : ""}">${score(f)}</b><span class="r ${a.tbc ? "is-tbc " : ""}${w === "away" ? "is-won" : ""}">${esc(a.text)}</span></div></div>`;
 }
 

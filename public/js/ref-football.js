@@ -1,7 +1,7 @@
 // Football referee view: my games, big + and -, state buttons, penalties, the stream panel.
 // Pure rendering from the event as the phone should show it; every tap goes through c.send().
 
-import { esc, side, pitchName } from "./ui.js";
+import { esc, side, pitchName, stageText as stageName } from "./ui.js";
 import { streamInfo, HTTPS, terms } from "../core/model.js";
 import { restoreOps } from "./ref-queue.js";
 
@@ -12,7 +12,7 @@ const byTime = (a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : a.id < b.
 const fixture = (event, id) => event.fixtures.find((f) => f.id === id);
 
 function stageText(event, f) {
-  if (f.stage) return f.stage;
+  if (f.stage) return stageName(f.stage);
   const div = event.divisions.find((d) => d.id === f.division);
   const team = div && div.teams.find((t) => t.id === f.home);
   return [event.divisions.length > 1 && div ? div.name : "", team && team.group ? `Group ${team.group}` : ""].filter(Boolean).join(", ");

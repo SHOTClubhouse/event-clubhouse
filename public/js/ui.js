@@ -29,10 +29,14 @@ export function applyTheme(event) {
 }
 
 // A team or placeholder for one side of a game: { id, text, tbc }.
+// "Round of 32 1" reads as "Round of 32, game 1" (stage names and the placeholders built on them).
+export const stageText = (s) => String(s ?? "").replace(/(Round of \d+) (\d+)/g, "$1, game $2");
+
 export function side(event, fixture, which) {
   const div = event.divisions.find((d) => d.id === fixture.division);
-  if (!div) return { id: null, text: fixture[which], tbc: true };
-  return sideLabel(div, event.fixtures, fixture[which], event.settings.points);
+  if (!div) return { id: null, text: stageText(fixture[which]), tbc: true };
+  const r = sideLabel(div, event.fixtures, fixture[which], event.settings.points);
+  return { ...r, text: stageText(r.text) };
 }
 
 export const pitchName = (event, id) => ((event.pitches || []).find((p) => p.id === id) || {}).name || "";

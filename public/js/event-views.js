@@ -1,7 +1,7 @@
 // Fan app views: pure functions from state to HTML. No DOM access, no network. Everything
 // that came from the event goes through esc().
 
-import { esc, side, pitchName, plural } from "/js/ui.js";
+import { esc, side, pitchName, plural, stageText } from "/js/ui.js";
 import { tables, champion, winnerOf } from "/core/standings.js";
 import { currentBout, ringsNow, resultText, decision } from "/core/boxing.js";
 
@@ -67,7 +67,7 @@ export function headerHtml(ev) {
   const th = ev.theme || {};
   const lock = [
     th.logo ? `<img class="ece-logo" src="${esc(th.logo)}" alt="${esc(th.partner || ev.name)} logo" height="36">` : "",
-    th.partner ? `<span class="ece-lock__name">${esc(th.partner)}</span><span class="ece-lock__x" aria-hidden="true">&times;</span><span class="ece-sr">and</span>` : "",
+    th.partner ? `${th.logo ? "" : `<span class="ece-lock__name">${esc(th.partner)}</span>`}<span class="ece-lock__x" aria-hidden="true">&times;</span><span class="ece-sr">and</span>` : "",
     `<img class="ece-lock__shot" src="/assets/brand/shot-logo.png" alt="SHOT" height="26">`,
   ].join("");
   const live = ev.phase === "live" ? `<span class="ec-badge ec-badge--live ece-live">Live</span>` : ev.phase === "post" ? `<span class="ec-badge ece-phase">Full time</span>` : `<span class="ec-badge ece-phase">Coming up</span>`;
@@ -97,7 +97,7 @@ export function gameCard(ev, f, S, o = {}) {
   const meta = [
     stateBadge(f),
     f.homeScore != null || f.state !== "scheduled" ? `<span>${esc(f.time)}</span>` : "",
-    f.stage ? `<b>${esc(f.stage)}</b>` : groupOf(ev, f) ? `<span>${esc(groupOf(ev, f))}</span>` : "",
+    f.stage ? `<b>${esc(stageText(f.stage))}</b>` : groupOf(ev, f) ? `<span>${esc(groupOf(ev, f))}</span>` : "",
     o.pitch !== false && f.pitch && ev.pitches.length > 1 ? `<span>${esc(pitchName(ev, f.pitch))}</span>` : "",
     o.division && ev.divisions.length > 1 ? `<span>${esc((divOf(ev, f.division) || {}).name || "")}</span>` : "",
     f.pens ? `<span>Won on pens</span>` : "",
@@ -249,7 +249,7 @@ function koRounds(ev, div) {
 function koCard(ev, f, S) {
   const h = side(ev, f, "home"), a = side(ev, f, "away"), w = winnerOf(f);
   const row = (s, score, win, k) => `<div class="ece-ko__r${s.tbc ? " is-tbc" : ""}${win ? " is-won" : ""}"><span>${esc(s.text)}</span><b data-score="${esc(f.id)}-${k}">${score == null ? "" : esc(score)}</b></div>`;
-  return `<article class="ece-ko ece-ko--${esc(f.state)}${S.follow && [h.id, a.id].includes(S.follow) ? " is-mine" : ""}" data-fx="${esc(f.id)}"><div class="ece-ko__m">${stateBadge(f)}<span>${esc(f.stage)} &middot; ${esc(f.time)}${f.pitch && ev.pitches.length > 1 ? ` &middot; ${esc(pitchName(ev, f.pitch))}` : ""}</span></div>
+  return `<article class="ece-ko ece-ko--${esc(f.state)}${S.follow && [h.id, a.id].includes(S.follow) ? " is-mine" : ""}" data-fx="${esc(f.id)}"><div class="ece-ko__m">${stateBadge(f)}<span>${esc(stageText(f.stage))} &middot; ${esc(f.time)}${f.pitch && ev.pitches.length > 1 ? ` &middot; ${esc(pitchName(ev, f.pitch))}` : ""}</span></div>
     ${row(h, f.homeScore, w === "home", "h")}${row(a, f.awayScore, w === "away", "a")}${f.pens ? `<small class="ece-ko__p">Won on penalties</small>` : ""}</article>`;
 }
 export function knockoutsView(S) {
