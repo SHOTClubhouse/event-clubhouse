@@ -39,6 +39,9 @@ export function side(event, fixture, which) {
   return { ...r, text: stageText(r.text) };
 }
 
+// A side's name as HTML: the team, or before the groups finish, whoever holds that place so far.
+export const sideHtml = (s) => (s.soFar ? `${esc(s.soFar)}<small class="ec-sofar">${esc(s.text)} so far</small>` : esc(s.text));
+
 export const pitchName = (event, id) => ((event.pitches || []).find((p) => p.id === id) || {}).name || "";
 export const officialName = (event, id) => ((event.officials || []).find((o) => o.id === id) || {}).name || "";
 

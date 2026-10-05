@@ -1,7 +1,7 @@
 // Big screen slides: each slide is { key, max, build(n) }. build(n) returns HTML for at most n
 // rows, so the fit loop in screen.js can shrink a slide until it fits the TV.
 
-import { esc, side, pitchName, stageText } from "/js/ui.js";
+import { esc, side, sideHtml, pitchName, stageText } from "/js/ui.js";
 import { tables, champion, winnerOf } from "/core/standings.js";
 import { currentBout, ringsNow, resultText, decision } from "/core/boxing.js";
 import { fmtDate, byTime, isJuniors, hasRings, ringName } from "/js/event-views.js";
@@ -11,12 +11,18 @@ import { fitSlides } from "/js/fit-screen.js";
 const RECENT_MS = 3 * 60 * 1000;
 const score = (f) => (f.homeScore == null ? "v" : `${esc(f.homeScore)}<i>-</i>${esc(f.awayScore)}`);
 
+const BALL = `<svg class="ecv-ball" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10.5" fill="#fff" stroke="#111" stroke-width="1.5"/><path d="M12 7l4.5 3.3-1.7 5.3H9.2L7.5 10.3z" fill="#111"/><path d="M12 7V1.8M16.5 10.3l5-1.6M14.8 15.6l3.1 4.3M9.2 15.6l-3.1 4.3M7.5 10.3l-5-1.6" stroke="#111" stroke-width="1.5" fill="none"/></svg>`;
+const scorerList = (f, k) => {
+  const l = (f.goals || []).filter((g) => g.side === k).map((g) => `${BALL}${g.label ? esc(g.label) : "Goal"}${g.min != null ? ` ${esc(g.min)}&prime;` : ""}`);
+  return l.length ? `<small class="ecv-scorers">${l.map((x) => `<em>${x}</em>`).join("")}</small>` : "";
+};
+
 function card(ev, f, o = {}) {
   const h = side(ev, f, "home"), a = side(ev, f, "away"), w = f.state === "ft" ? winnerOf(f) : null;
   const t = ev.divisions.find((d) => d.id === f.division);
   const g = t && (t.teams.find((x) => x.id === f.home) || {}).group;
-  const meta = [f.state === "live" ? `<span class="ecv-live">Live</span>` : f.state === "ft" ? `<span class="ecv-ft">Full time</span>` : "", `<span>${esc(f.time)}</span>`, f.stage ? `<b>${esc(stageText(f.stage))}</b>` : g ? `<span>Group ${esc(g)}</span>` : "", f.pens ? "<span>Won on pens</span>" : ""].filter(Boolean).join("");
-  return `<div class="ecv-game ecv-game--${esc(f.state)}${o.small ? " ecv-game--s" : ""}" data-fx="${esc(f.id)}"><div class="ecv-game__m">${meta}</div><div class="ecv-game__r"><span class="${h.tbc ? "is-tbc " : ""}${w === "home" ? "is-won" : ""}">${esc(h.text)}</span><b class="ecv-sc${f.homeScore == null ? " is-time" : ""}">${score(f)}</b><span class="r ${a.tbc ? "is-tbc " : ""}${w === "away" ? "is-won" : ""}">${esc(a.text)}</span></div></div>`;
+  const meta = [f.state === "live" ? `<span class="ecv-live">Live${f.startedAt ? ` ${Math.max(1, Math.floor((Date.now() - f.startedAt) / 60000) + 1)}&prime;` : ""}</span>` : f.state === "ft" ? `<span class="ecv-ft">Full time</span>` : "", `<span>${esc(f.time)}</span>`, f.stage ? `<b>${esc(stageText(f.stage))}</b>` : g ? `<span>Group ${esc(g)}</span>` : "", f.pens ? "<span>Won on pens</span>" : ""].filter(Boolean).join("");
+  return `<div class="ecv-game ecv-game--${esc(f.state)}${o.small ? " ecv-game--s" : ""}" data-fx="${esc(f.id)}"><div class="ecv-game__m">${meta}</div><div class="ecv-game__r"><span class="${h.tbc ? "is-tbc " : ""}${w === "home" ? "is-won" : ""}">${sideHtml(h)}${o.small ? "" : scorerList(f, "home")}</span><b class="ecv-sc${f.homeScore == null ? " is-time" : ""}">${score(f)}</b><span class="r ${a.tbc ? "is-tbc " : ""}${w === "away" ? "is-won" : ""}">${sideHtml(a)}${o.small ? "" : scorerList(f, "away")}</span></div></div>`;
 }
 
 function gamesSlide(S) {
@@ -57,7 +63,7 @@ function koSlides(S) {
     ko.forEach((f) => { const k = f.stage.replace(/\s*\d+$/, "").trim(); if (!map.has(k)) map.set(k, []); map.get(k).push(f); });
     out.push({ key: `ko:${d.id}`, max: 1, build: () => `<div class="ecv-slide"><h2 class="ecv-title">${esc(ev.divisions.length > 1 ? `${d.name} knockouts` : "Knockouts")}</h2><div class="ecv-bracket" style="--c:${map.size}">${[...map].map(([name, games]) => `<section><h3 class="ecv-h3">${esc(name)}</h3>${games.map((f) => {
       const h = side(ev, f, "home"), a = side(ev, f, "away"), w = winnerOf(f);
-      return `<div class="ecv-ko ecv-ko--${esc(f.state)}"><div class="ecv-ko__m">${f.state === "live" ? `<span class="ecv-live">Live</span>` : ""}<span>${esc(f.time)}</span></div><div class="${h.tbc ? "is-tbc " : ""}${w === "home" ? "is-won" : ""}"><span>${esc(h.text)}</span><b>${f.homeScore ?? ""}</b></div><div class="${a.tbc ? "is-tbc " : ""}${w === "away" ? "is-won" : ""}"><span>${esc(a.text)}</span><b>${f.awayScore ?? ""}</b></div></div>`;
+      return `<div class="ecv-ko ecv-ko--${esc(f.state)}"><div class="ecv-ko__m">${f.state === "live" ? `<span class="ecv-live">Live</span>` : ""}<span>${esc(f.time)}</span></div><div class="${h.tbc ? "is-tbc " : ""}${w === "home" ? "is-won" : ""}"><span>${sideHtml(h)}</span><b>${f.homeScore ?? ""}</b></div><div class="${a.tbc ? "is-tbc " : ""}${w === "away" ? "is-won" : ""}"><span>${sideHtml(a)}</span><b>${f.awayScore ?? ""}</b></div></div>`;
     }).join("")}</section>`).join("")}</div></div>` });
   });
   return out;
@@ -79,6 +85,13 @@ function voteSlide(S) {
   const L = v.leaders || [];
   const max = Math.max(...L.map((l) => l.votes), 1);
   return { key: "vote", max: 5, build: (n) => `<div class="ecv-slide ecv-vote"><div><h2 class="ecv-title">Fans' players of the day</h2>${L.length ? `<ol class="ecv-lb">${L.slice(0, n).map((l, i) => `<li class="${i === 0 ? "is-top" : ""}"><i style="--w:${Math.round((l.votes / max) * 100)}%"></i><span class="r">${i + 1}</span><span class="w"><b>${esc(l.label)}</b><small>${esc(l.team)}</small></span><span class="n">${l.votes}</span></li>`).join("")}</ol>` : `<p class="ecv-empty">Votes open when a game kicks off. Scan the code to be first.</p>`}</div>${qrBox(S)}</div>` };
+}
+
+function streamSlide(S) {
+  const ev = S.event;
+  if (!(ev.settings && ev.settings.streamPreview === true)) return null;
+  if ((ev.stream && ev.stream.url) || (ev.pitches || []).some((p) => p.stream && p.stream.url)) return null;
+  return { key: "stream", max: 1, build: () => `<div class="ecv-slide ecv-stream"><p class="ecv-kicker"><span class="ecv-live">Live stream</span></p><div class="ecv-stream__box" role="img" aria-label="Live stream slot, 16 by 9"><b>Your stream plays here</b><small>Every game, live on this screen and on your phone</small></div><ul class="ecv-stream__marks" aria-label="Works with"><li>YouTube</li><li>Twitch</li><li>Veo</li></ul></div>` };
 }
 
 function resultsSlide(S) {
@@ -157,6 +170,7 @@ export function buildSlides(S) {
   if (ev.phase === "pre") { add(helloSlide(S)); add(gamesSlide(S)); tableSlides(S).forEach(add); add(clubSlide(S)); return out; }
   if (ev.phase === "post") { add(helloSlide(S)); add(resultsSlide(S)); tableSlides(S).forEach(add); koSlides(S).forEach(add); if (votes) add(voteSlide(S)); add(clubSlide(S)); return out; }
   add(gamesSlide(S));
+  add(streamSlide(S));
   tableSlides(S).forEach(add);
   koSlides(S).forEach(add);
   if (votes) add(voteSlide(S));
@@ -169,5 +183,5 @@ export function goalHtml(S, g) {
   const ev = S.event, f = ev.fixtures.find((x) => x.id === g.id);
   if (!f) return "";
   const h = side(ev, f, "home"), a = side(ev, f, "away");
-  return `<div class="ecv-goal" role="status"><p>${esc(terms(ev).Score)}</p><h2>${esc(g.team)}</h2><div class="ecv-goal__s"><span>${esc(h.text)}</span><b>${esc(f.homeScore)}<i>-</i>${esc(f.awayScore)}</b><span>${esc(a.text)}</span></div><small>${esc(pitchName(ev, f.pitch))}</small></div>`;
+  return `<div class="ecv-goal" role="status"><p>${esc(terms(ev).Score)}</p><h2>${esc(g.team)}</h2>${g.label || g.min != null ? `<h3 class="ecv-goal__who">${BALL}${[g.label ? esc(g.label) : "", g.min != null ? `${esc(g.min)}&prime;` : ""].filter(Boolean).join(" ")}</h3>` : ""}<div class="ecv-goal__s"><span>${esc(h.text)}</span><b>${esc(f.homeScore)}<i>-</i>${esc(f.awayScore)}</b><span>${esc(a.text)}</span></div><small>${esc(pitchName(ev, f.pitch))}</small></div>`;
 }

@@ -1,7 +1,7 @@
 // Fan app views: pure functions from state to HTML. No DOM access, no network. Everything
 // that came from the event goes through esc().
 
-import { esc, side, pitchName, plural, stageText } from "/js/ui.js";
+import { esc, side, sideHtml, pitchName, plural, stageText } from "/js/ui.js";
 import { tables, champion, winnerOf } from "/core/standings.js";
 import { currentBout, ringsNow, resultText, decision } from "/core/boxing.js";
 import { fitTabs, fitView, fitWrapParts } from "/js/fit-fan.js";
@@ -90,7 +90,16 @@ function scoreHtml(f) {
   if (f.homeScore == null) return `<span class="ece-sc__t">${esc(f.time)}</span>`;
   return `${esc(f.homeScore)}<i>-</i>${esc(f.awayScore)}`;
 }
-const stateBadge = (f) => (f.state === "live" ? `<span class="ec-badge ec-badge--live">Live</span>` : f.state === "ft" ? `<span class="ec-badge ec-badge--ft">FT</span>` : "");
+const stateBadge = (f) => (f.state === "live" ? `<span class="ec-badge ec-badge--live ece-pulse"><i class="ece-ldot" aria-hidden="true"></i>Live${f.startedAt ? ` ${Math.floor((Date.now() - f.startedAt) / 60000) + 1}'` : ""}</span>` : f.state === "ft" ? `<span class="ec-badge ec-badge--ft">FT</span>` : "");
+
+const BALL = `<svg class="ece-ball" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 7l4 3-1.5 5h-5L8 10z"/></svg>`;
+// Scorers for one side: "#9 Sam 6'" or just "6'" when there is no label.
+export function goalsHtml(f, which) {
+  const g = (Array.isArray(f.goals) ? f.goals : []).filter((x) => x && x.side === which);
+  if (!g.length) return "";
+  return `<ul class="ece-goals ece-goals--${which === "home" ? "h" : "a"}" aria-label="${which === "home" ? "Home" : "Away"} scorers">${g.map((x) => `<li>${BALL}<span>${x.label ? `${esc(x.label)} ` : ""}${x.min != null ? `${esc(x.min)}'` : ""}</span></li>`).join("")}</ul>`;
+}
+const goalsRow = (f) => (Array.isArray(f.goals) && f.goals.length ? `<div class="ece-goalrow">${goalsHtml(f, "home")}${goalsHtml(f, "away")}</div>` : "");
 
 export function gameCard(ev, f, S, o = {}) {
   const h = side(ev, f, "home"), a = side(ev, f, "away");
@@ -109,7 +118,9 @@ export function gameCard(ev, f, S, o = {}) {
   const label = f.homeScore != null ? `${h.text} ${f.homeScore}, ${a.text} ${f.awayScore}${f.state === "live" ? ", live" : f.state === "ft" ? ", full time" : ""}` : `${h.text} v ${a.text} at ${f.time}`;
   return `<article class="ece-game ece-game--${esc(f.state)}${o.big ? " ece-game--big" : ""}${mine ? " is-mine" : ""}" data-fx="${esc(f.id)}" aria-label="${esc(label)}">
     <div class="ece-game__meta">${meta}</div>
-    <div class="ece-game__row"><span class="${cls(h, "h")}">${esc(h.text)}</span><span class="ece-sc${f.homeScore == null ? " is-time" : ""}" data-score="${esc(f.id)}">${scoreHtml(f)}</span><span class="${cls(a, "a")}">${esc(a.text)}</span></div>
+    <div class="ece-game__row"><span class="${cls(h, "h")}">${sideHtml(h)}</span><span class="ece-sc${f.homeScore == null ? " is-time" : ""}" data-score="${esc(f.id)}">${scoreHtml(f)}</span><span class="${cls(a, "a")}">${sideHtml(a)}</span></div>
+    ${goalsRow(f)}
+    ${f.state === "live" && o.big && !isJuniors(ev) && ev.settings.vote && ev.settings.vote.open ? `<button type="button" class="ece-votecta" data-go="vote"><span>Vote: player of the game</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>` : ""}
   </article>`;
 }
 
@@ -228,7 +239,9 @@ export function resultsView(S) {
   const ev = S.event;
   const done = ev.fixtures.filter((f) => f.state === "ft").sort((a, b) => (b.ftAt || 0) - (a.ftAt || 0) || byTime(b, a));
   if (!done.length) return empty("No results yet", "Full-time scores will land here as games finish.");
-  return `<section class="ece-sec"><h2 class="ece-h">Results <span class="ece-h__n">${plural(done.length, "game")}</span></h2>${done.map((f) => gameCard(ev, f, S, { division: true })).join("")}</section>`;
+  const groups = new Map();
+  done.forEach((f) => { const k = f.stage ? f.stage.replace(/\s*\d+$/, "").trim() : groupOf(ev, f) || "Group games"; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(f); });
+  return `<section class="ece-sec"><h2 class="ece-h">Results <span class="ece-h__n">${plural(done.length, "game")}</span></h2>${[...groups].map(([k, l]) => `<div class="ece-rgroup"><h3 class="ece-h3">${esc(k)}</h3>${l.map((f) => gameCard(ev, f, S, { division: true })).join("")}</div>`).join("")}</section>`;
 }
 
 // ---- Tables ----
@@ -250,9 +263,9 @@ function koRounds(ev, div) {
 }
 function koCard(ev, f, S) {
   const h = side(ev, f, "home"), a = side(ev, f, "away"), w = winnerOf(f);
-  const row = (s, score, win, k) => `<div class="ece-ko__r${s.tbc ? " is-tbc" : ""}${win ? " is-won" : ""}"><span>${esc(s.text)}</span><b data-score="${esc(f.id)}-${k}">${score == null ? "" : esc(score)}</b></div>`;
+  const row = (s, score, win, k) => `<div class="ece-ko__r${s.tbc ? " is-tbc" : ""}${win ? " is-won" : ""}"><span>${sideHtml(s)}</span><b data-score="${esc(f.id)}-${k}">${score == null ? "" : esc(score)}</b></div>`;
   return `<article class="ece-ko ece-ko--${esc(f.state)}${S.follow && [h.id, a.id].includes(S.follow) ? " is-mine" : ""}" data-fx="${esc(f.id)}"><div class="ece-ko__m">${stateBadge(f)}<span>${esc(stageText(f.stage))} &middot; ${esc(f.time)}${f.pitch && ev.pitches.length > 1 ? ` &middot; ${esc(pitchName(ev, f.pitch))}` : ""}</span></div>
-    ${row(h, f.homeScore, w === "home", "h")}${row(a, f.awayScore, w === "away", "a")}${f.pens ? `<small class="ece-ko__p">Won on penalties</small>` : ""}</article>`;
+    ${row(h, f.homeScore, w === "home", "h")}${row(a, f.awayScore, w === "away", "a")}${f.pens ? `<small class="ece-ko__p">Won on penalties</small>` : ""}${goalsRow(f)}</article>`;
 }
 export function knockoutsView(S) {
   const ev = S.event;

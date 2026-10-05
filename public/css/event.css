@@ -320,3 +320,39 @@
 @media (min-width: 720px) {
   .ece-rings { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
 }
+
+/* ---- Live look: scorers, pulse, broadcast slot, bracket ---- */
+.ece-ldot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; margin-right: 6px; animation: ece-pulse 1.4s ease-in-out infinite; }
+@keyframes ece-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.7); } }
+.ece-goalrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin-top: 8px; }
+.ece-goals { list-style: none; margin: 0; padding: 0; font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+.ece-goals--a { grid-column: 2; text-align: right; }
+.ece-goals--h { grid-column: 1; }
+.ece-goals li { display: flex; gap: 6px; align-items: center; min-height: 20px; }
+.ece-goals--a li { justify-content: flex-end; }
+.ece-ball { flex: none; color: var(--accent); }
+.ece-game--live { background: #05080a; }
+.ece-game--big .ece-sc { background: #000; border: 1px solid var(--line-soft); padding: 8px 10px; color: var(--text); letter-spacing: 0.02em; }
+.ece-game--big.ece-game--live .ece-sc { border-color: var(--accent); }
+.ece-game--big .ece-t { text-transform: uppercase; font-family: var(--display); font-weight: 400; letter-spacing: 0.03em; font-size: 1.25rem; }
+.ece-game--big .ece-goals { font-size: 0.86rem; }
+.ece-broadcast { position: relative; aspect-ratio: 16 / 9; width: 100%; background: #020304; border: 1px solid var(--line-soft); border-radius: var(--r); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text); text-align: center; padding: 12px; overflow: hidden; }
+.ece-broadcast__tag { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; background: #e5384b; color: #fff; font-weight: 800; font-size: 0.74rem; letter-spacing: 0.1em; padding: 4px 10px; border-radius: 6px; }
+.ece-broadcast__play { color: var(--accent); }
+.ece-broadcast b { font-family: var(--display); font-weight: 400; font-size: 1.4rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.ece-broadcast__pills { list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.ece-broadcast__pills li { border: 1px solid var(--accent); color: var(--accent); border-radius: 999px; padding: 6px 14px; font-weight: 700; font-size: 0.85rem; }
+.ece-bracket { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch; }
+.ece-bracket:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ece-round-col { flex: 0 0 min(260px, 78vw); display: flex; flex-direction: column; justify-content: space-around; }
+.ece-ko .ece-goalrow { margin-top: 6px; }
+.ece-ko__r b { font-family: var(--display); font-weight: 400; font-size: 1.3rem; }
+@media (prefers-reduced-motion: reduce) { .ece-ldot { animation: none; } }
+.ece-votecta { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 48px; margin-top: 12px; padding: 10px 16px; background: var(--gold); color: #000; border: 0; border-radius: var(--r); font-family: var(--display); font-size: 1.15rem; letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer; }
+.ece-votecta:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+.ece-rgroup { margin-bottom: 18px; }
+.ece-rgroup .ece-h3 { color: var(--gold); }
+.ece-game--ft .ece-t:not(.is-won) { color: var(--muted); font-weight: 600; }
+.ece-game--ft .ece-t.is-won { font-weight: 900; }
+/* on a wide screen the empty stream slot is a banner, so the games stay above the fold */
+@media (min-width: 760px) { .ece-broadcast { aspect-ratio: 21 / 9; max-height: 340px; } }

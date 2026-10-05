@@ -8,7 +8,7 @@ import { finishers } from "/js/fit-screen.js";
 
 const slug = (location.pathname.match(/^\/e\/([^/]+)/) || [])[1] || "";
 const $ = (s) => document.querySelector(s);
-const ROTATE_MS = Number(new URLSearchParams(location.search).get("every")) * 1000 || 12000, GOAL_MS = 6500, SCALES = [1, 0.92, 0.84, 0.76, 0.68, 0.6, 0.52];
+const ROTATE_MS = Number(new URLSearchParams(location.search).get("every")) * 1000 || 10000, GOAL_MS = 4000, SCALES = [1, 0.92, 0.84, 0.76, 0.68, 0.6, 0.52];
 const S = { event: null, votes: null, qr: "", qrClub: "", fanUrl: `${location.origin}/e/${slug}/`, fanHost: `${location.host}/e/${slug}/`, clubUrl: `${location.origin}/e/${slug}/#clubhouse`, seenFt: {}, lastOk: 0, key: null, slides: [] };
 let idx = 0, lastHtml = "", goalUntil = 0, goals = [], rotTimer = null;
 
@@ -89,7 +89,10 @@ function detectGoals(old, ev) {
   const o = new Map(old.fixtures.map((f) => [f.id, f]));
   ev.fixtures.forEach((f) => {
     const p = o.get(f.id);
-    if (p && p.state !== "ft" && f.state !== "ft" && f.homeScore != null && p.homeScore != null) {
+    const pg = p ? (p.goals || []).length : 0, fg = (f.goals || []).length;
+    if (p && p.state !== "ft" && f.state !== "ft" && fg > pg) {
+      f.goals.slice(pg).forEach((g) => goals.push({ id: f.id, team: side(ev, f, g.side).text, label: g.label || "", min: g.min == null ? null : g.min }));
+    } else if (p && p.state !== "ft" && f.state !== "ft" && !fg && f.homeScore != null && p.homeScore != null) {
       if (f.homeScore > p.homeScore) goals.push({ id: f.id, team: side(ev, f, "home").text });
       else if (f.awayScore > p.awayScore) goals.push({ id: f.id, team: side(ev, f, "away").text });
     }

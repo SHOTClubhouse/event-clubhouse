@@ -20,6 +20,50 @@ function stageText(event, f) {
 
 const sides = (event, f) => ({ home: side(event, f, "home"), away: side(event, f, "away") });
 
+// The squad of the team on one side of a game: [{ id, number, name }], or [] when there is none.
+const squadOf = (event, f, which) => {
+  const id = side(event, f, which).id;
+  const div = event.divisions.find((d) => d.id === f.division);
+  const t = id && div && div.teams.find((x) => x.id === id);
+  return t && Array.isArray(t.players) ? t.players : [];
+};
+const playerText = (p) => [p.number != null ? `#${p.number}` : "", (p.name || "").trim()].filter(Boolean).join(" ");
+
+// "#9 Sam Brown 6'" under the score, one line per goal, home on the left and away on the right.
+function goalList(event, f, s) {
+  const goals = Array.isArray(f.goals) ? f.goals : [];
+  if (!goals.length) return "";
+  const div = event.divisions.find((d) => d.id === f.division);
+  const rows = goals.map((g) => {
+    const t = div && div.teams.find((x) => x.id === g.team);
+    const p = g.player != null && t && (t.players || []).find((x) => x.id === g.player);
+    const who = g.player == null ? "Not sure" : p ? playerText(p) || "Player" : "Unknown player";
+    return `<li class="ecr-goal ecr-goal--${g.side}"><span class="ecr-sr">${esc(s[g.side].text)}: </span>${esc(who)}${g.min != null ? ` ${esc(String(g.min))}'` : ""}</li>`;
+  }).join("");
+  return `<ul class="ecr-goals" aria-label="Goals">${rows}</ul>`;
+}
+
+// The "Who scored?" sheet. ui.pick = { id, side, f } while it is open.
+function sheet(c) {
+  const { event, ui } = c;
+  const pick = ui.pick;
+  const f = pick && fixture(event, pick.id);
+  if (!f) return "";
+  const nm = sides(event, f)[pick.side];
+  const list = squadOf(event, f, pick.side).map((p) => `<li><button type="button" class="ecr-pl" data-act="pick-player" data-player="${esc(p.id)}" data-f="pl:${esc(p.id)}">${p.number != null ? `<span class="ecr-pl__n">#${esc(String(p.number))}</span>` : ""}${(p.name || "").trim() ? `<span class="ecr-pl__name">${esc(p.name.trim())}</span>` : ""}</button></li>`).join("");
+  return `<div class="ecr-sheetwrap">
+    <div class="ecr-backdrop" data-act="pick-close"></div>
+    <div class="ecr-sheet" role="dialog" aria-modal="true" aria-labelledby="ecr-sheet-h" tabindex="-1">
+      <h2 id="ecr-sheet-h" class="ecr-sheet__h">Who scored for ${esc(nm.text)}?</h2>
+      <ul class="ecr-squad">${list}</ul>
+      <div class="ecr-sheet__foot ecr-two">
+        <button type="button" class="ec-btn ec-btn--big" data-act="pick-player" data-player="" data-f="pl:none">Not sure</button>
+        <button type="button" class="ec-btn ec-btn--big ec-btn--ghost" data-act="pick-close" data-f="pl:close">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 export function mine(me) { return (f) => f.ref === me.id || (!!me.pitch && f.pitch === me.pitch); }
 
 // Which games this referee is looking at, split into the three lists.
@@ -46,8 +90,8 @@ function sideCol(c, f, which, nm) {
   return `<div class="ecr-side">
     <p class="ecr-name${nm.tbc ? " is-tbc" : ""}">${esc(nm.text)}</p>
     <p class="ecr-score${started ? "" : " is-idle"}" aria-label="${esc(nm.text)} ${n ?? 0}">${n ?? 0}</p>
-    <button type="button" class="ec-btn ecr-plus" data-act="score" data-id="${esc(f.id)}" data-side="${which}" data-d="1" data-f="p:${esc(f.id)}:${which}" aria-label="${esc(T.Score)} for ${esc(nm.text)}">+</button>
-    <button type="button" class="ec-btn ec-btn--ghost ecr-minus" data-act="score" data-id="${esc(f.id)}" data-side="${which}" data-d="-1" data-f="m:${esc(f.id)}:${which}" aria-label="Take a ${esc(T.score)} off ${esc(nm.text)}"${(n ?? 0) === 0 ? " disabled" : ""}>&minus;</button>
+    <button type="button" class="ec-btn ecr-plus" data-act="goal" data-id="${esc(f.id)}" data-side="${which}" data-d="1" data-f="p:${esc(f.id)}:${which}" aria-label="${esc(T.Score)} for ${esc(nm.text)}">+</button>
+    <button type="button" class="ec-btn ec-btn--ghost ecr-minus" data-act="goal-undo" data-id="${esc(f.id)}" data-side="${which}" data-d="-1" data-f="m:${esc(f.id)}:${which}" aria-label="Take a ${esc(T.score)} off ${esc(nm.text)}"${(n ?? 0) === 0 ? " disabled" : ""}>&minus;</button>
   </div>`;
 }
 
@@ -77,6 +121,7 @@ function full(c, f) {
     <header class="ecr-game__head">${meta(c, f, badgeFor(f))}</header>
     <div class="ecr-sides">${sideCol(c, f, "home", s.home)}<span class="ecr-v" aria-hidden="true">v</span>${sideCol(c, f, "away", s.away)}</div>
     <div class="ecr-states" role="group" aria-label="Game state">${seg}</div>
+    ${goalList(c.event, f, s)}
     ${f.state === "scheduled" ? '<p class="ec-help ecr-hint">Tap + to score. The game goes live by itself.</p>' : ""}
     ${pens}
   </article>`;
@@ -177,7 +222,15 @@ export function render(c) {
     if (L.done.length) body += section("Finished", L.done.length, L.done.map(card).join(""));
     if (!L.live.length && !L.next.length) body = `<div class="ec-empty">${(ui.scope || "mine") === "mine" ? "All your games are finished. Thank you." : "All games are finished."}</div>` + body;
   }
-  return `${filters(c)}${body}${streamPanel(c)}`;
+  return `${filters(c)}${body}${streamPanel(c)}${sheet(c)}`;
+}
+
+function sendGoal(c, f, which, player) {
+  const s = sides(c.event, f);
+  const h = (f.homeScore ?? 0) + (which === "home" ? 1 : 0), a = (f.awayScore ?? 0) + (which === "away" ? 1 : 0);
+  if (h > 99 || a > 99) return;
+  const op = { op: "goal.add", id: f.id, side: which, ...(player ? { player } : {}) };
+  return c.send([op], { undo: restoreOps(f), haptic: 18, say: `${s[which].text} scored. ${s.home.text} ${h}, ${s.away.text} ${a}` });
 }
 
 export function act(c, name, el) {
@@ -193,6 +246,36 @@ export function act(c, name, el) {
     if (h < 0 || a < 0 || h > 99 || a > 99) return;
     const s = sides(event, f);
     return c.send([{ op: "fixture.score", id, home: h, away: a }], { key: `score:${id}`, undo: restoreOps(f), haptic: d > 0 ? 18 : 8, say: `${s.home.text} ${h}, ${s.away.text} ${a}` });
+  }
+  if (name === "goal") {
+    const f = fixture(event, id); if (!f) return;
+    const which = el.dataset.side;
+    // A finished game keeps the plain +1 so a result can still be corrected.
+    if (f.state === "ft") return act(c, "score", el);
+    if (event.settings.juniors || !squadOf(event, f, which).length) return sendGoal(c, f, which, null);
+    ui.pick = { id, side: which, f: el.dataset.f };
+    return c.rerender();
+  }
+  if (name === "pick-close") { ui.pick = null; return c.rerender(); }
+  if (name === "pick-player") {
+    const pick = ui.pick; if (!pick) return;
+    const f = fixture(event, pick.id);
+    ui.pick = null;
+    if (!f) return c.rerender();
+    return sendGoal(c, f, pick.side, el.dataset.player || null);
+  }
+  if (name === "goal-undo") {
+    const f = fixture(event, id); if (!f) return;
+    const which = el.dataset.side;
+    const n = f[which === "home" ? "homeScore" : "awayScore"] ?? 0;
+    if (n <= 0) return;
+    const mineGoals = (f.goals || []).filter((g) => g.side === which);
+    const last = mineGoals[mineGoals.length - 1];
+    // Put the goal back with its scorer where we can; otherwise restore the whole game.
+    const back = last && mineGoals.length === n && f.state !== "ft"
+      ? [{ op: "goal.add", id, side: which, ...(last.player != null ? { player: last.player } : {}), ...(last.min != null ? { min: last.min } : {}) }]
+      : restoreOps(f);
+    return c.send([{ op: "goal.undo", id, side: which }], { undo: back, haptic: 8, say: `Goal taken off ${sides(event, f)[which].text}` });
   }
   if (name === "state") {
     const f = fixture(event, id); if (!f) return;
@@ -223,5 +306,39 @@ export function act(c, name, el) {
     delete ui.drafts[`stream:${target}:url`]; delete ui.drafts[`stream:${target}:label`];
     return sent;
   }
+}
+
+// The sheet's keyboard and focus. ref.js redraws the page by replacing its HTML, so this watches
+// the page: focus moves into the sheet when it opens, Tab stays inside it, Escape closes it, and
+// focus goes back to the + button that opened it.
+if (typeof document !== "undefined") {
+  let wasOpen = false, opener = null;
+  const sheetEl = () => document.querySelector(".ecr-sheet");
+  const sync = () => {
+    const el = sheetEl();
+    document.body.classList.toggle("ecr-sheet-open", !!el);
+    if (el) {
+      if (!wasOpen) { const a = document.activeElement; opener = a && a.dataset ? a.dataset.f || null : null; }
+      if (!el.contains(document.activeElement)) el.focus({ preventScroll: true });
+    } else if (wasOpen && opener) {
+      const back = document.querySelector(`[data-f="${CSS.escape(opener)}"]`);
+      if (back && !back.disabled) back.focus({ preventScroll: true });
+      opener = null;
+    }
+    wasOpen = !!el;
+  };
+  const start = () => { const app = document.getElementById("app"); if (app) new MutationObserver(sync).observe(app, { childList: true, subtree: true }); };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
+  document.addEventListener("keydown", (e) => {
+    const el = sheetEl(); if (!el) return;
+    if (e.key === "Escape") { e.preventDefault(); const x = el.querySelector('[data-act="pick-close"]'); if (x) x.click(); return; }
+    if (e.key !== "Tab") return;
+    const items = [...el.querySelectorAll("button:not([disabled])")];
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1], on = document.activeElement;
+    if (!el.contains(on) || (on === el && e.shiftKey)) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+    else if (e.shiftKey && on === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && on === last) { e.preventDefault(); first.focus(); }
+  });
 }
 

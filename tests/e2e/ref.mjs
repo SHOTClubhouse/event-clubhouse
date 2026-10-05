@@ -1,12 +1,12 @@
 // Browser end to end for the referee, judge and coach pages (/ref/ and /coach/).
-//   node tests/e2e/ref.mjs [baseUrl]        (default http://127.0.0.1:8802)
+//   node tests/e2e/ref.mjs [baseUrl]        (or BASE=...; default http://127.0.0.1:8802; PW_CHANNEL=chrome for installed Chrome)
 // Needs the dev server running with the seeded demos. It resets futsal-finals and fight-night
 // first, so run it against a local database. Screenshots go to .screens/ref and .screens/coach.
 
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 
-const BASE = (process.argv[2] || "http://127.0.0.1:8802").replace(/\/$/, "");
+const BASE = (process.argv[2] || process.env.BASE || "http://127.0.0.1:8802").replace(/\/$/, "");
 mkdirSync(".screens/ref", { recursive: true });
 mkdirSync(".screens/coach", { recursive: true });
 
@@ -32,7 +32,7 @@ async function reset(slug, adminCode) {
   if (r.status !== 200) throw new Error(`reset ${slug}: ${r.status} ${JSON.stringify(r.body)}`);
 }
 
-const browser = await chromium.launch();
+const browser = await chromium.launch(process.env.PW_CHANNEL ? { channel: process.env.PW_CHANNEL } : {});
 const pages = [];
 async function phone(size = { width: 360, height: 740 }) {
   const ctx = await browser.newContext({ viewport: size, hasTouch: true, isMobile: true, acceptDownloads: false });
@@ -53,6 +53,16 @@ const signIn = async (page, path, code) => {
 const status = (page) => page.locator("#ecr-status");
 const saved = (page) => page.waitForFunction(() => /On the website/.test(document.querySelector("#ecr-status")?.textContent || ""), null, { timeout: 15000 });
 const tap = async (loc, n = 1) => { for (let i = 0; i < n; i++) await loc.tap(); };
+// A + tap opens the "Who scored?" sheet when the team has a squad; "Not sure" keeps the old one-tap feel.
+const goal = async (page, plus, n = 1) => {
+  for (let i = 0; i < n; i++) {
+    await plus.tap();
+    const sure = page.locator('.ecr-sheet [data-act=pick-player][data-player=""]');
+    await sure.waitFor({ timeout: 3000 }).catch(() => {});
+    if (await sure.count()) await sure.tap();
+  }
+};
+const until = async (fn, ms = 15000) => { const t = Date.now(); for (;;) { const v = await fn(); if (v) return v; if (Date.now() - t > ms) return null; await sleep(250); } };
 
 try {
   await reset("futsal-finals", CODES.admin);
@@ -106,8 +116,8 @@ try {
   await ref.screenshot({ path: ".screens/ref/02-football-game.png" });
 
   await ref.locator(`[data-act=state][data-id="${firstId}"][data-state=live]`).tap();
-  await tap(plusH, 2);
-  await tap(plusA, 1);
+  await goal(ref, plusH, 2);
+  await goal(ref, plusA, 1);
   await ref.locator(`[data-act=state][data-id="${firstId}"][data-state=ft]`).tap();
   await saved(ref);
   ok(/On the website/.test(await status(ref).innerText()), "shows 'On the website' with a time");
@@ -119,7 +129,7 @@ try {
   // undo
   const next = ref.locator(".ecr-game.is-scheduled").first();
   const nextId = await next.locator(".ecr-plus").first().getAttribute("data-id");
-  await ref.locator(`.ecr-plus[data-id="${nextId}"][data-side="home"]`).tap();
+  await goal(ref, ref.locator(`.ecr-plus[data-id="${nextId}"][data-side="home"]`));
   await saved(ref);
   let g = (await pub("futsal-finals")).fixtures.find((x) => x.id === nextId);
   ok(g.homeScore === 1 && g.state === "live", "a + tap makes the game live with 1-0");
@@ -134,7 +144,7 @@ try {
   await refCtx.setOffline(true);
   await ref.evaluate(() => window.dispatchEvent(new Event("offline")));
   const offPlus = ref.locator(`.ecr-plus[data-id="${offId}"][data-side="away"]`);
-  await tap(offPlus, 2);
+  await goal(ref, offPlus, 2);
   await ref.waitForSelector(".ecr-banner--warn");
   const banner = await ref.locator(".ecr-banner--warn").innerText();
   ok(/2 taps/.test(banner), "offline banner counts the taps", banner);
@@ -160,8 +170,8 @@ try {
   await qf.tap();
   await ref.waitForSelector('.ecr-plus[data-id="QF1"]');
   await ref.locator('[data-act=state][data-id="QF1"][data-state=live]').tap();
-  await ref.locator('.ecr-plus[data-id="QF1"][data-side="home"]').tap();
-  await ref.locator('.ecr-plus[data-id="QF1"][data-side="away"]').tap();
+  await goal(ref, ref.locator('.ecr-plus[data-id="QF1"][data-side="home"]'));
+  await goal(ref, ref.locator('.ecr-plus[data-id="QF1"][data-side="away"]'));
   ok((await ref.locator('.ecr-pens').count()) === 0, "no penalty picker while the game is live");
   await ref.locator('[data-act=state][data-id="QF1"][data-state=ft]').tap();
   await ref.waitForSelector(".ecr-pens");
@@ -172,6 +182,97 @@ try {
   g = (await pub("futsal-finals")).fixtures.find((x) => x.id === "QF1");
   ok(g.pens === "away" && g.state === "ft", "penalty winner saved", JSON.stringify(g));
   ok((await ref.locator(`.ecr-pens`).count()) === 1, "picker stays so it can be changed");
+
+  // who scored
+  console.log("\n-- Who scored");
+  {
+    const tok = await login(CODES.ref1);
+    const fullEvent = async () => (await api("GET", "/api/events/futsal-finals/full", null, tok)).body.event;
+    const gid = await ref.locator(".ecr-game.is-scheduled .ecr-plus").first().getAttribute("data-id");
+    const ev = await fullEvent();
+    const fx = ev.fixtures.find((x) => x.id === gid);
+    const div = ev.divisions.find((d) => d.id === fx.division);
+    const home = div.teams.find((t) => t.id === fx.home), away = div.teams.find((t) => t.id === fx.away);
+    ok(!!home && !!away && home.players.length > 1 && away.players.length > 0, "the game has two teams with squads", gid);
+    const plus = (w) => ref.locator(`.ecr-plus[data-id="${gid}"][data-side="${w}"]`);
+    const minusB = (w) => ref.locator(`.ecr-minus[data-id="${gid}"][data-side="${w}"]`);
+    const sheet = ref.locator(".ecr-sheet");
+    const goalsNow = async () => (await fullEvent()).fixtures.find((x) => x.id === gid).goals || [];
+    const game = ref.locator(`.ecr-game:has(.ecr-plus[data-id="${gid}"])`);
+    const pl = home.players[0];
+    const shown = [pl.number != null ? "#" + pl.number : "", pl.name].filter(Boolean).join(" ");
+
+    await plus("home").tap();
+    await sheet.waitFor();
+    ok((await sheet.getAttribute("role")) === "dialog" && (await sheet.getAttribute("aria-modal")) === "true", "the sheet is a modal dialog");
+    const title = await ref.locator("#ecr-sheet-h").innerText();
+    ok(title === `Who scored for ${home.name}?`, "sheet title names the team", title);
+    const rows = await ref.locator(".ecr-pl").count();
+    ok(rows === home.players.length, "sheet lists the whole squad", String(rows));
+    const first = (await ref.locator(".ecr-pl").first().innerText()).replace(/\s+/g, " ").trim();
+    ok(first === shown, "squad rows show number and full name", first + " v " + shown);
+    ok(await ref.locator('.ecr-sheet [data-player=""]').isVisible(), "there is a Not sure button");
+    const hs = await ref.locator(".ecr-sheet button").evaluateAll((b) => b.map((x) => x.getBoundingClientRect().height));
+    ok(hs.every((h) => h >= 44), "every sheet button is at least 44px", hs.join(","));
+    ok((await overflow(ref)) <= 0, "no overflow with the sheet open at 360px");
+    ok(await ref.evaluate(() => !!document.activeElement.closest(".ecr-sheet")), "focus moves into the sheet");
+    await ref.screenshot({ path: ".screens/ref/16-who-scored.png" });
+    let inside = true;
+    for (let i = 0; i < home.players.length + 4; i++) { await ref.keyboard.press("Tab"); inside = inside && (await ref.evaluate(() => !!document.activeElement.closest(".ecr-sheet"))); }
+    for (let i = 0; i < 3; i++) { await ref.keyboard.press("Shift+Tab"); inside = inside && (await ref.evaluate(() => !!document.activeElement.closest(".ecr-sheet"))); }
+    ok(inside, "Tab and Shift+Tab stay inside the sheet");
+    await ref.keyboard.press("Escape");
+    await sheet.waitFor({ state: "detached" });
+    ok(true, "Escape closes the sheet");
+    ok(await ref.evaluate(() => (document.activeElement.dataset.f || "").startsWith("p:")), "focus goes back to the + button");
+    await sleep(600);
+    ok((await goalsNow()).length === 0, "closing the sheet scores nothing");
+    await plus("home").tap();
+    await sheet.waitFor();
+    await ref.locator(".ecr-sheet [data-act=pick-close]").last().tap();
+    await sheet.waitFor({ state: "detached" });
+    ok(true, "Cancel closes the sheet");
+
+    // pick a player
+    await plus("home").tap();
+    await ref.locator(`.ecr-pl[data-player="${pl.id}"]`).tap();
+    await sheet.waitFor({ state: "detached" });
+    const homeScore = game.locator(".ecr-side").first().locator(".ecr-score");
+    ok((await homeScore.innerText()) === "1", "picking a player puts the score up");
+    const line = game.locator(".ecr-goal--home");
+    await line.first().waitFor();
+    const text = (await line.first().innerText()).replace(/\s+/g, " ").trim();
+    ok(text.includes(shown) && /\d+'$/.test(text), "scorer line reads like '#9 Sam Brown 6''", text);
+    const g1 = await until(async () => { const g = await goalsNow(); return g.length === 1 ? g : null; });
+    ok(!!g1 && g1[0].side === "home" && g1[0].player === pl.id && Number.isInteger(g1[0].min), "the website has the goal with scorer and minute", JSON.stringify(g1));
+
+    // not sure
+    await plus("away").tap();
+    await ref.locator('.ecr-sheet [data-player=""]').tap();
+    await sheet.waitFor({ state: "detached" });
+    const awayLine = game.locator(".ecr-goal--away");
+    await awayLine.first().waitFor();
+    const at = (await awayLine.first().innerText()).replace(/\s+/g, " ").trim();
+    ok(/Not sure \d+'$/.test(at), "Not sure shows as 'Not sure 6''", at);
+    const g2 = await until(async () => { const g = await goalsNow(); return g.length === 2 ? g : null; });
+    ok(!!g2 && g2[1].side === "away" && g2[1].player == null, "Not sure sends no player", JSON.stringify(g2));
+
+    // minus, and undo of minus
+    await minusB("away").tap();
+    await ref.waitForFunction((id) => !document.querySelector(`.ecr-game:has(.ecr-plus[data-id="${id}"]) .ecr-goal--away`), gid, { timeout: 15000 });
+    ok(true, "minus takes the goal off the list");
+    const f3 = await until(async () => { const f = (await fullEvent()).fixtures.find((x) => x.id === gid); return f.awayScore === 0 && (f.goals || []).length === 1 ? f : null; });
+    ok(!!f3 && f3.homeScore === 1, "the website agrees: 1-0 with one goal", JSON.stringify(f3));
+    await ref.locator("[data-act=undo]").tap();
+    const g4 = await until(async () => { const f = (await fullEvent()).fixtures.find((x) => x.id === gid); return f.awayScore === 1 && (f.goals || []).length === 2 ? f.goals : null; });
+    ok(!!g4, "Undo after minus puts the goal back", JSON.stringify(g4));
+    await minusB("away").tap();
+    await minusB("home").tap();
+    const g5 = await until(async () => { const f = (await fullEvent()).fixtures.find((x) => x.id === gid); return f.homeScore === 0 && f.awayScore === 0 && (f.goals || []).length === 0; });
+    ok(!!g5, "both goals off leaves 0-0 and no scorers");
+    ok((await game.locator(".ecr-goals").count()) === 0, "no scorer list when there are no goals");
+    ok((await overflow(ref)) <= 0, "no overflow with the scorer list at 360px");
+  }
 
   // scope and pitch filter
   console.log("\n-- Filters and stream");

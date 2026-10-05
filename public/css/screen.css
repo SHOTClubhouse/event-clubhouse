@@ -34,7 +34,8 @@ html, body.ecv-body { height: 100%; overflow: hidden; cursor: none; }
 /* Games */
 .ecv-games { display: grid; grid-template-columns: repeat(var(--c, 1), minmax(0, 1fr)); gap: 2.4vw; align-items: start; }
 .ecv-game { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 1.6vh; padding: calc(1.5vh * var(--f)) 1.4vw calc(1.7vh * var(--f)); margin-bottom: calc(1.4vh * var(--f)); }
-.ecv-game--live { border-color: color-mix(in srgb, var(--accent) 60%, transparent); box-shadow: inset 0.7vh 0 0 var(--accent); }
+.ecv-game--live { border-color: var(--gold); background: #0a0c0e; box-shadow: inset 0.7vh 0 0 var(--gold); }
+.ecv-game--live .ecv-sc { color: var(--gold); }
 .ecv-game--ft { opacity: 0.92; }
 .ecv-game__m { display: flex; align-items: center; gap: 1.2vw; font-size: calc(1.9vh * var(--f)); color: var(--muted); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: calc(0.8vh * var(--f)); }
 .ecv-game__m b { color: var(--text); }
@@ -45,7 +46,7 @@ html, body.ecv-body { height: 100%; overflow: hidden; cursor: none; }
 .ecv-game__r > span.r { text-align: right; }
 .ecv-game__r .is-tbc { color: var(--dim); }
 .ecv-game__r .is-won { color: var(--accent); }
-.ecv-sc { font-family: var(--display); font-weight: 400; font-size: calc(8vh * var(--f)); line-height: 1; min-width: 10vw; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ecv-sc { font-family: var(--display); font-weight: 400; font-size: calc(11vh * var(--f)); line-height: 1; min-width: 10vw; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ecv-sc i { font-style: normal; color: var(--dim); padding: 0 0.4vw; }
 .ecv-sc.is-time { font-family: var(--display); font-size: calc(4vh * var(--f)); color: var(--dim); }
 .ecv-game--s { padding: calc(1vh * var(--f)) 1.2vw calc(1.2vh * var(--f)); }
@@ -148,6 +149,29 @@ html, body.ecv-body { height: 100%; overflow: hidden; cursor: none; }
 .ecv-goal__s i { font-style: normal; color: var(--dim); padding: 0 1vw; }
 .ecv-goal__s span:first-child { text-align: right; }
 .ecv-goal small { color: var(--muted); font-size: 2.6vh; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; }
+/* Scorers, stream slot, ticker feel */
+.ecv-scorers { display: grid; gap: 0.2vh; margin-top: calc(0.8vh * var(--f)); font-family: var(--body); text-transform: none; font-weight: 700; font-size: calc(2vh * var(--f)); color: var(--muted); letter-spacing: 0; }
+.ecv-scorers em { font-style: normal; }
+.ecv-ball { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 0.4em; flex: none; }
+.ecv-goal__who .ecv-ball { width: 0.8em; height: 0.8em; vertical-align: -0.05em; }
+.ecv-game__r > span.r .ecv-scorers { justify-items: end; }
+.ecv-game__m > span:nth-child(2) { color: var(--accent); }
+.ecv-goal__who { margin: 0; font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: 8vh; line-height: 1; color: var(--gold); }
+.ecv-goal p { color: var(--gold); }
+.ecv-lb li.is-top .w b { color: var(--gold); }
+.ecv-lb i { background: color-mix(in srgb, var(--gold) 28%, transparent); }
+.ecv-stream { display: grid; gap: 2vh; justify-items: center; align-content: center; }
+.ecv-stream .ecv-kicker { margin: 0; }
+.ecv-stream__box { aspect-ratio: 16 / 9; height: 52vh; max-width: 100%; display: grid; place-content: center; gap: 1.4vh; text-align: center; background: #000; border: 0.4vh dashed var(--accent); border-radius: 2vh; padding: 2vw; }
+.ecv-stream__box b { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: 8vh; line-height: 1; }
+.ecv-stream__box small { color: var(--muted); font-size: 2.6vh; font-weight: 700; }
+.ecv-stream__marks { list-style: none; margin: 0; padding: 0; display: flex; gap: 1.4vw; }
+.ecv-stream__marks li { border: 1px solid var(--line); border-radius: 999px; padding: 0.8vh 1.6vw; font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase; font-size: 2.4vh; }
+.ecv-dots i { transition: transform 0.3s; }
+.ecv-dots i.on { transform: scale(1.4); }
+.ecv-follow b { animation: ecv-nudge 6s ease-in-out infinite; }
+@keyframes ecv-nudge { 0%, 85%, 100% { color: var(--accent); } 92% { color: var(--gold); } }
+@media (prefers-reduced-motion: reduce) { .ecv-goal p, .ecv-goalwrap, .ecv-stage.is-in > *, .ecv-follow b, .ecv-livetag::before, .ecv-live::before { animation: none !important; } .ecv-lb i, .ecv-split span, .ecv-dots i { transition: none; } }
 @keyframes ecv-pop { 0% { transform: scale(0.6); opacity: 0; } 70% { transform: scale(1.06); } 100% { transform: scale(1); opacity: 1; } }
 
 /* Footer */

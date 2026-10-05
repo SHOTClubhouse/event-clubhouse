@@ -136,3 +136,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* Powered by SHOT */
 .ec-powered { display: inline-flex; align-items: center; gap: 8px; color: var(--dim); font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 800; text-decoration: none; }
 .ec-powered img { height: 22px; width: auto; }
+
+/* a knockout place before the groups finish: the team holding it now, and the place in small */
+.ec-sofar { display: block; font: 600 max(.68rem, .38em)/1.25 var(--body); letter-spacing: .02em; text-transform: none; color: var(--muted); margin-top: 2px; }

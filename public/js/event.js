@@ -173,6 +173,13 @@ function streamList(ev) {
 function syncStream() {
   const host = $("#stream"), ev = S.event;
   const list = ev && ev.phase === "live" ? streamList(ev) : [];
+  if (!list.length && ev && ev.phase === "live" && S.tab === "now" && ev.settings && ev.settings.streamPreview) {
+    if (last.stream !== "preview") {
+      last.stream = "preview"; host.hidden = false;
+      host.innerHTML = `<section class="ece-stream" aria-label="Live stream"><div class="ece-broadcast"><span class="ece-broadcast__tag"><i class="ece-ldot" aria-hidden="true"></i>LIVE</span><svg class="ece-broadcast__play" width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><circle cx="28" cy="28" r="26" fill="none" stroke="currentColor" stroke-width="3"/><path d="M23 18l16 10-16 10z" fill="currentColor"/></svg><b>Your stream plays here</b><ul class="ece-broadcast__pills"><li>YouTube</li><li>Twitch</li><li>Veo</li></ul></div></section>`;
+    }
+    return;
+  }
   if (!list.length || S.tab !== "now") { if (!host.hidden || last.stream) { host.hidden = true; host.innerHTML = ""; last.stream = ""; } return; }
   if (S.streamSel >= list.length) S.streamSel = 0;
   const sig = JSON.stringify(list.map((x) => [x.id, x.info.url])) + S.streamSel + S.streamOn;

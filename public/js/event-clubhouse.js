@@ -70,7 +70,11 @@ function joinSection(S) {
 function lineupSection(ch) {
   const rows = [...((ch.culture || {}).lineup || [])].sort((a, b) => String(a.time || "99:99").localeCompare(String(b.time || "99:99")));
   if (!rows.length) return "";
-  return sec("lineup", "The line-up", `<ol class="ece-lineup">${rows.map((x) => `<li><span class="ece-lineup__t">${x.time ? esc(x.time) : "On the day"}</span><b>${esc(x.name)}</b><span class="ece-chipline">${esc(x.role)}</span></li>`).join("")}</ol>`);
+  const item = (x) => {
+    const guest = x.role === "Guest";
+    return `<li class="ece-act${guest ? " is-guest" : ""}"><span class="ece-act__t">${x.time ? esc(x.time) : "On the day"}</span><span class="ece-act__n">${guest ? `<span class="ece-act__star">Special guest</span>` : ""}<b>${esc(x.name)}</b></span><span class="ece-pill ece-pill--${esc(String(x.role).toLowerCase())}">${esc(x.role)}</span></li>`;
+  };
+  return sec("lineup", "The line-up", `<ol class="ece-lineup ece-poster">${rows.map(item).join("")}</ol>`);
 }
 
 function playlistSection(S) {
@@ -79,10 +83,12 @@ function playlistSection(S) {
   return sec("music", "The playlist", `<div class="ece-spot"><iframe src="${esc(src)}" title="${esc(`Spotify player for the ${S.event.name} playlist`)}" width="100%" height="352" loading="lazy" allow="encrypted-media"></iframe></div><p class="ece-note">Plays inside this page. Press play on the player.</p>`);
 }
 
+const LOCK = `<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false"><path d="M4 7h8v6H4zM5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
 function dropsSection(ch) {
   const rows = (ch.culture || {}).drops || [];
   if (!rows.length) return "";
-  return sec("drops", "Drops", `<ul class="ece-drops">${rows.map((d) => `<li class="ece-card"><h3 class="ece-h3">${esc(d.when || "Soon")}</h3><b>${esc(d.title)}</b>${d.body ? `<p>${esc(d.body)}</p>` : ""}</li>`).join("")}</ul>`);
+  const item = (d) => `<li class="ece-card ece-drop${d.exclusive ? " is-exclusive" : ""}">${d.exclusive ? `<span class="ece-lock">${LOCK}Members only</span>` : ""}<h3 class="ece-h3">${esc(d.when || "Soon")}</h3><b>${esc(d.title)}</b>${d.body ? `<p>${esc(d.body)}</p>` : ""}</li>`;
+  return sec("drops", "Drops", `<ul class="ece-drops">${rows.map(item).join("")}</ul>`);
 }
 
 function tiersSection(ch) {

@@ -117,6 +117,7 @@ export function clubhouse(ctx) {
       { key: "title", label: "Title", make: txt({ maxlength: "60" }), read: readTxt },
       { key: "body", label: "Text", make: (v) => { const t = textarea({ rows: "2", maxlength: "300" }); t.value = v || ""; return t; }, read: (c) => c.value.trim() },
       { key: "when", label: "When", make: txt({ maxlength: "30", placeholder: "Out now" }), read: readTxt },
+      { key: "exclusive", label: "Members only", help: "Fans see a lock and \"Members only\".", make: (v) => h("input", { type: "checkbox", checked: !!v }), read: (c) => c.checked },
     ],
   });
   const posts = rowEditor({
