@@ -11,11 +11,12 @@ import fight from "./fight-night.js";
 export const SEEDS = Object.fromEntries([beach, futsal, sixes, fight].map((s) => [s.slug, s]));
 export const SEED_ORDER = [beach.slug, futsal.slug, sixes.slug, fight.slug];
 
-// A prospect or demo event from a seed. overrides: { slug, name, partner, accent, logo, teams }.
+// A prospect or demo event from a seed. overrides: { slug, name, partner, accent, logo, teams,
+// recipe } where recipe is the prospect's own format (see recipeOf in lib.js).
 export function buildDemo(key, now, overrides = null) {
   const seed = SEEDS[key];
   if (!seed) throw new Error(`No demo seed called ${key}`);
-  const doc = seed.build(now);
+  const doc = seed.build(now, (overrides && overrides.recipe) || {});
   if (overrides) {
     if (overrides.slug) doc.slug = overrides.slug;
     if (overrides.name) doc.name = overrides.name;

@@ -62,8 +62,11 @@ export function footballDoc(o) {
   doc.settings.voteBy = o.voteBy;
   doc.settings.vote = { open: !!o.voteOpen };
   doc.settings.lockSecs = 60;
+  if (o.terms) doc.settings.terms = { ...o.terms };
   doc.pitches = o.pitches.map((name, i) => ({ id: `P${i + 1}`, name, stream: { url: null, on: false, label: "" } }));
-  doc.officials = o.refs.map((name, i) => ({ id: `R${i + 1}`, name, role: "referee", pitch: o.pitches.length === o.refs.length ? `P${i + 1}` : null }));
+  // one referee per pitch: the seed's own names first, invented ones for any extra pitches
+  const refs = o.pitches.map((_, i) => (o.refs && o.refs[i]) || namer());
+  doc.officials = refs.map((name, i) => ({ id: `R${i + 1}`, name, role: "referee", pitch: `P${i + 1}` }));
   const teams = o.teams.map((name, i) => ({ id: `T${i + 1}`, name }));
   const g = generate({
     teams, format: o.format, groups: o.groups, advance: o.advance, legs: 1, thirdPlace: !!o.thirdPlace,
@@ -71,7 +74,8 @@ export function footballDoc(o) {
     pitches: doc.pitches.map((p) => p.id), refs: doc.officials.map((r) => r.id), refMode: "pitch", division: "main", idPrefix: "M",
   });
   if (!g.ok) throw new Error(`seed ${o.slug}: ${g.errors.join(" ")}`);
-  doc.divisions = [{ id: "main", name: o.division, format: o.format, teams: g.teams.map((t) => ({ ...t, players: squad(rand, namer, between(rand, 6, 8)) })) }];
+  const [lo, hi] = Array.isArray(o.squad) ? o.squad : [6, 8];
+  doc.divisions = [{ id: "main", name: o.division, format: o.format, teams: g.teams.map((t) => ({ ...t, players: squad(rand, namer, between(rand, lo, hi)) })) }];
   doc.fixtures = g.fixtures;
   return { doc, rand, generated: g };
 }
@@ -83,3 +87,51 @@ export function check(doc) {
 }
 
 export const withPrivate = (doc, seed) => { doc.private = { demo: { seed } }; return doc; };
+
+// ---- Recipes: a prospect's own version of a demo ----
+// A recipe changes only the parts of a seed listed here (names, format, timings, wording), so
+// it can never change what a demo is. Each seed merges a recipe over its own defaults.
+export const RECIPE_KEYS = {
+  football: ["name", "venue", "about", "teams", "division", "format", "groups", "advance", "thirdPlace", "gameMins", "gapMins", "pitches", "voteBy", "terms", "squad"],
+  boxing: ["name", "venue", "about", "bouts", "judges", "terms", "clubs"],
+};
+
+export function recipeOf(kind, r) {
+  const out = {};
+  if (!r || typeof r !== "object") return out;
+  RECIPE_KEYS[kind].forEach((k) => { if (r[k] !== undefined && r[k] !== null) out[k] = r[k]; });
+  return out;
+}
+
+// Problems with a recipe, in words an organiser could fix. Empty when it is fine.
+export function recipeErrors(kind, r) {
+  const e = [];
+  if (r == null) return e;
+  if (typeof r !== "object" || Array.isArray(r)) return ["recipe: an object"];
+  const known = new Set(RECIPE_KEYS[kind]);
+  Object.keys(r).forEach((k) => { if (!known.has(k)) e.push(`recipe.${k}: not something a ${kind} demo can change`); });
+  const names = (v, lo, hi, max) => Array.isArray(v) && v.length >= lo && v.length <= hi && v.every((x) => typeof x === "string" && x.trim() && x.length <= max);
+  if (kind === "football") {
+    if (r.teams !== undefined && !names(r.teams, 2, 32, 40)) e.push("recipe.teams: 2 to 32 team names, 40 characters or fewer");
+    if (r.pitches !== undefined && !names(r.pitches, 1, 8, 40)) e.push("recipe.pitches: 1 to 8 names, 40 characters or fewer");
+    if (r.squad !== undefined && !(Array.isArray(r.squad) && r.squad.length === 2 && r.squad.every(Number.isInteger) && r.squad[0] >= 1 && r.squad[0] <= r.squad[1] && r.squad[1] <= 20)) e.push("recipe.squad: [smallest, largest] squad, up to 20");
+  } else {
+    if (r.bouts !== undefined && !(Array.isArray(r.bouts) && r.bouts.length >= 1 && r.bouts.length <= 20 && r.bouts.every((b) => b && typeof b === "object"))) e.push("recipe.bouts: 1 to 20 bouts");
+    if (r.judges !== undefined && ![0, 1, 3, 5].includes(r.judges)) e.push("recipe.judges: 0, 1, 3 or 5");
+    if (r.clubs !== undefined && !names(r.clubs, 2, 40, 40)) e.push("recipe.clubs: 2 to 40 club names");
+  }
+  return e;
+}
+
+// Access codes for a demo built from its document: the organiser, every official, and the first
+// two teams' coaches. Labels use the event's own names (a prospect's teams and courts).
+export function codesFor(doc) {
+  const place = (id) => (doc.pitches.find((p) => p.id === id) || {}).name;
+  const out = [{ role: "admin", subject: null, label: "Organiser" }];
+  doc.officials.forEach((o) => {
+    const label = o.role === "judge" ? `Judge ${o.id.replace(/^\D+/, "")}` : doc.sport === "boxing" ? "Referee and timekeeper" : place(o.pitch) ? `Referee, ${place(o.pitch)}` : "Referee";
+    out.push({ role: o.role, subject: o.id, label });
+  });
+  doc.divisions.flatMap((v) => v.teams).slice(0, 2).forEach((t) => out.push({ role: "coach", subject: t.id, label: `Coach, ${t.name}` }));
+  return out;
+}

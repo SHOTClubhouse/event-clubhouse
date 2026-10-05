@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { blankEvent, validate, publicView, playerLabel, streamInfo, addMins, consentText } from "../public/core/model.js";
+import { blankEvent, validate, publicView, playerLabel, streamInfo, addMins, consentText, terms } from "../public/core/model.js";
 import { generate, roundRobin, snakeGroups, seedOrder, bracket, checkOptions } from "../public/core/generator.js";
 import { standings, resolve, champion, winnerOf, tables } from "../public/core/standings.js";
 import { decision, judgeCard, cardsComplete, resultText, nextState } from "../public/core/boxing.js";
@@ -360,4 +360,18 @@ test("team ids are unique across divisions, so a coach code can only ever mean o
     { id: "D2", name: "Women", format: "league", teams: [{ id: "T1", name: "B", players: [] }] },
   ];
   assert.ok(validate(d).some((e) => /team T1/.test(e)));
+});
+
+test("an event's words: football by default, courts and points when set, checked when saved", () => {
+  const d = blankEvent({ slug: "x-cup", name: "X Cup" });
+  assert.deepEqual([terms(d).place, terms(d).places, terms(d).Score, terms(d).diff.abbr], ["pitch", "pitches", "Goal", "GD"]);
+  assert.equal(terms(blankEvent({ slug: "f", name: "F", sport: "boxing" })).place, "ring");
+  d.settings.terms = { place: "court", score: "point", discipline: "Dodgeball" };
+  assert.deepEqual([terms(d).Places, terms(d).scores, terms(d).diff.abbr, terms(d).discipline], ["Courts", "points", "PD", "Dodgeball"]);
+  assert.deepEqual(validate(d), []);
+  d.settings.terms.place = "pool";
+  assert.ok(validate(d).some((e) => /terms.place/.test(e)));
+  const r = applyOps(blankEvent({ slug: "y-cup", name: "Y" }), [{ op: "settings.set", terms: { place: "cage", score: "goal", discipline: "Street football" } }], { role: "admin", id: null });
+  assert.equal(r.ok, true);
+  assert.equal(terms(r.doc).Place, "Cage");
 });

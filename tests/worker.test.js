@@ -6,7 +6,7 @@ import { roleView } from "../src/views.js";
 import { readJson, MAX_BODY, CSP } from "../src/http.js";
 import { SEEDS, SEED_ORDER, buildDemo, demoStatements } from "../src/seeds/index.js";
 import { simStep, runStep } from "../src/sim.js";
-import { rng } from "../src/seeds/lib.js";
+import { rng, recipeErrors, codesFor } from "../src/seeds/lib.js";
 import { toSql } from "../scripts/lib.js";
 import { validate } from "../public/core/model.js";
 import { champion } from "../public/core/standings.js";
@@ -444,4 +444,44 @@ test("rate limits key IPv4 by address and IPv6 by its /64", () => {
   assert.equal(connectionKey("2001:db8::1"), "2001:db8:0:0::/64");
   assert.equal(connectionKey("::1"), "0:0:0:0::/64");
   assert.equal(connectionKey("local"), "local");
+});
+
+test("a prospect's recipe rebuilds the live demo in their format, and survives a reset", () => {
+  const now = Date.parse("2026-10-05T10:00:00Z");
+  const recipe = { teams: ["North", "East", "South", "West", "Central", "Coast"], format: "league", pitches: ["Court 1", "Court 2", "Court 3"], gameMins: 8, terms: { place: "court", score: "goal", discipline: "Futsal" }, squad: [5, 7] };
+  const { doc } = buildDemo("beach-soccer-cup", now, { slug: "p-abcdefghij", name: "Prospect Cup", accent: "#123456", recipe });
+  assert.deepEqual(validate(doc), []);
+  assert.equal(doc.divisions[0].format, "league");
+  assert.equal(doc.divisions[0].teams.length, 6);
+  assert.equal(doc.fixtures.length, 15);
+  assert.deepEqual(doc.pitches.map((p) => p.name), ["Court 1", "Court 2", "Court 3"]);
+  assert.equal(doc.officials.filter((o) => o.role === "referee").length, 3);
+  assert.equal(doc.settings.terms.discipline, "Futsal");
+  assert.ok(doc.divisions[0].teams.every((t) => t.players.length >= 5 && t.players.length <= 7));
+  assert.deepEqual(doc.private.demo.overrides.recipe, recipe);
+  const codes = codesFor(doc);
+  assert.deepEqual(codes.map((c) => c.label), ["Organiser", "Referee, Court 1", "Referee, Court 2", "Referee, Court 3", "Coach, North", "Coach, East"]);
+  // the public demo is unchanged when no recipe is given
+  const plain = buildDemo("beach-soccer-cup", now).doc;
+  assert.equal(plain.divisions[0].teams.length, 8);
+  assert.equal(plain.pitches.length, 2);
+});
+
+test("a boxing recipe sets the card, rounds and judges", () => {
+  const now = Date.parse("2026-10-05T19:00:00Z");
+  const recipe = { name: "Amateur Show", bouts: [{ title: "Bout 1", rounds: 3, roundMins: 3 }, { title: "Bout 2", rounds: 3, roundMins: 3 }, { title: "Main event", rounds: 3, roundMins: 3, weight: "Heavyweight" }], judges: 5, terms: { discipline: "Amateur boxing" } };
+  const { doc } = buildDemo("fight-night", now, { slug: "p-boxboxboxb", name: "Prospect Night", accent: "#aa0000", recipe });
+  assert.deepEqual(validate(doc), []);
+  assert.equal(doc.card.bouts.length, 3);
+  assert.ok(doc.card.bouts.every((b) => b.rounds === 3 && b.roundMins === 3 && b.judges.length === 5));
+  assert.equal(doc.card.bouts[2].weight, "Heavyweight");
+  assert.deepEqual(codesFor(doc).map((c) => c.label), ["Organiser", "Judge 1", "Judge 2", "Judge 3", "Judge 4", "Judge 5", "Referee and timekeeper"]);
+});
+
+test("recipe problems are reported in plain words", () => {
+  assert.deepEqual(recipeErrors("football", { teams: ["A", "B"] }), []);
+  assert.ok(recipeErrors("football", { teams: ["A"] }).length);
+  assert.ok(recipeErrors("football", { slug: "x" }).some((e) => /not something/.test(e)));
+  assert.ok(recipeErrors("boxing", { judges: 2 }).length);
+  assert.ok(recipeErrors("boxing", { bouts: [] }).length);
 });

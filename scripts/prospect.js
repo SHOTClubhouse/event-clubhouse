@@ -11,6 +11,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { SEEDS, buildDemo, demoStatements } from "../src/seeds/index.js";
+import { recipeErrors, codesFor } from "../src/seeds/lib.js";
 import { hashCode } from "../src/auth.js";
 import { randomCode, randomSlugPart, formatCode, normaliseCode } from "../src/util.js";
 import { COLOUR, HTTPS } from "../public/core/model.js";
@@ -37,6 +38,16 @@ list.forEach((p, i) => {
   if (p.seed != null && !SEEDS[p.seed]) problems.push(`${at}: seed is one of ${Object.keys(SEEDS).join(", ")}`);
   if (p.logo != null && !(typeof p.logo === "string" && HTTPS.test(p.logo))) problems.push(`${at}: logo is an https link`);
   if (p.teams != null && !(Array.isArray(p.teams) && p.teams.every((t) => typeof t === "string" && t.trim() && t.length <= 40))) problems.push(`${at}: teams is a list of names, 40 characters or fewer`);
+  if (p.slug != null && !/^p-[a-z0-9]{10}$/.test(p.slug)) problems.push(`${at}: slug is p- and 10 lower-case letters or numbers (the existing link)`);
+  const seed = SEEDS[p.seed || "beach-soccer-cup"];
+  if (seed && p.recipe != null) {
+    if (!seed.recipes) problems.push(`${at}: the ${p.seed} demo can't take a recipe; use beach-soccer-cup or fight-night`);
+    else problems.push(...recipeErrors(seed.kind, p.recipe).map((e) => `${at}: ${e}`));
+  }
+  if (!problems.some((x) => x.startsWith(`${at}:`))) {
+    try { buildDemo(p.seed || "beach-soccer-cup", Date.now(), { slug: p.slug || "p-checkcheck", name: p.name.trim(), accent: p.accent, recipe: p.recipe || null }); }
+    catch (e) { problems.push(`${at}: ${e.message}`); }
+  }
 });
 if (problems.length) { console.error(problems.join("\n")); process.exit(1); }
 
@@ -45,12 +56,13 @@ const statements = [];
 const report = [];
 for (const p of list) {
   const seedKey = p.seed || "beach-soccer-cup";
-  const slug = `p-${randomSlugPart(10)}`;
-  const { seed, doc, votes } = buildDemo(seedKey, now, { slug, name: p.name.trim(), partner: p.partner || null, accent: p.accent, logo: p.logo || null, teams: Array.isArray(p.teams) ? p.teams : null });
+  // An entry with a slug updates that demo in place, so a link already in a proposal keeps working.
+  const slug = p.slug || `p-${randomSlugPart(10)}`;
+  const { doc, votes } = buildDemo(seedKey, now, { slug, name: p.name.trim(), partner: p.partner || null, accent: p.accent, logo: p.logo || null, teams: Array.isArray(p.teams) ? p.teams : null, recipe: p.recipe || null });
   const id = `prospect-${slug}`;
   const codes = [];
   const shown = [];
-  for (const [i, c] of seed.codes.entries()) {
+  for (const [i, c] of codesFor(doc).entries()) {
     const plain = randomCode(12);
     codes.push({ id: `${id}-${i + 1}`, hash: await hashCode(secret, normaliseCode(plain)), role: c.role, subject: c.subject, label: c.label });
     shown.push({ role: c.role, label: c.label, code: formatCode(plain) });

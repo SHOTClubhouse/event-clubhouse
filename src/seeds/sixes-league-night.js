@@ -10,6 +10,7 @@ const longDate = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString("en-
 
 export default {
   slug,
+  kind: "football",
   sim: null,
   blurb: "A six-team league night that has finished. See the final table, the champions, the organiser's updates and the fans' player of the night.",
   codes: [

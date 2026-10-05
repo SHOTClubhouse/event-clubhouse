@@ -7,6 +7,7 @@ const slug = "futsal-finals";
 
 export default {
   slug,
+  kind: "football",
   sim: null,
   blurb: "Twelve teams, three pitches and a day of futsal two weeks away. See the schedule and the groups, and try pre-registration as a fan.",
   codes: [

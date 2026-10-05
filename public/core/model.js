@@ -12,6 +12,10 @@ export const FORMATS = ["league", "groups-knockout", "knockout", "exhibition"];
 export const STATES = ["scheduled", "live", "ft"];
 export const BOUT_STATES = ["scheduled", "live", "break", "done"];
 export const VOTE_BY = ["number", "name", "both"];
+// The words an event uses: where games are played and what is scored. Futsal and dodgeball play
+// on courts and score points or goals; a street series plays on a cage; boxing has a ring.
+export const PLACES = ["pitch", "court", "cage", "ring", "arena"];
+export const SCORES = ["goal", "point"];
 export const OFFICIAL_ROLES = ["referee", "judge"];
 export const METHODS = ["PTS", "KO", "TKO", "RSC", "RTD", "DQ", "DRAW", "NC"];
 export const REASONS = ["style", "pressure", "defence", "power"];
@@ -88,6 +92,15 @@ function check(doc) {
   const pts = s.points || {};
   if (![pts.win, pts.draw, pts.loss].every((n) => Number.isInteger(n) && n >= 0 && n <= 10)) errs.push("settings.points: whole numbers 0 to 10");
   errs.push(...streamErrors(d.stream, "stream"));
+  if (s.terms != null) {
+    const t = s.terms;
+    if (typeof t !== "object" || Array.isArray(t)) errs.push("settings.terms: an object");
+    else {
+      if (t.place != null && !PLACES.includes(t.place)) errs.push(`settings.terms.place: one of ${PLACES.join(", ")}`);
+      if (t.score != null && !SCORES.includes(t.score)) errs.push(`settings.terms.score: one of ${SCORES.join(", ")}`);
+      if (!optText(t.discipline, 30)) errs.push("settings.terms.discipline: up to 30 characters");
+    }
+  }
 
   const pitchIds = new Set();
   (Array.isArray(d.pitches) ? d.pitches : errs.push("pitches missing") && []).forEach((p) => {
@@ -276,6 +289,23 @@ export function streamInfo(s) {
 // registration, both from here, so what was shown and what was recorded can never differ.
 // The organiser names themselves through theme.partner; otherwise the event name stands in.
 export const consentText = (doc) => `${(doc.theme && doc.theme.partner) || doc.name} and SHOT Clubhouse can email me about ${doc.name}, future events and the clubhouse. I can unsubscribe at any time.`;
+
+// ---- Words ----
+// terms(doc).place is "pitch", .places "pitches", .Place "Pitch"; .score "goal", .Score "Goal",
+// .diff the table's difference column. Older events have no terms and read as football.
+export function terms(doc) {
+  const t = (doc && doc.settings && doc.settings.terms) || {};
+  const place = PLACES.includes(t.place) ? t.place : doc && doc.sport === "boxing" ? "ring" : "pitch";
+  const score = SCORES.includes(t.score) ? t.score : "goal";
+  const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
+  const places = place === "pitch" ? "pitches" : `${place}s`;
+  return {
+    place, places, Place: cap(place), Places: cap(places),
+    score, scores: `${score}s`, Score: cap(score),
+    diff: score === "goal" ? { abbr: "GD", title: "Goal difference" } : { abbr: "PD", title: "Points difference" },
+    discipline: (typeof t.discipline === "string" && t.discipline.trim()) || "",
+  };
+}
 
 // ---- Small helpers ----
 export const teamOf = (doc, divisionId, teamId) => ((doc.divisions.find((v) => v.id === divisionId) || {}).teams || []).find((t) => t.id === teamId) || null;

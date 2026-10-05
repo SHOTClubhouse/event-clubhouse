@@ -2,7 +2,7 @@
 
 import { blankEvent } from "../../public/core/model.js";
 import { londonParts } from "../util.js";
-import { rng, personNamer, pick, check, withPrivate } from "./lib.js";
+import { rng, personNamer, pick, check, withPrivate, recipeOf } from "./lib.js";
 
 const slug = "fight-night";
 
@@ -11,6 +11,8 @@ const WEIGHTS = ["Light welterweight", "Welterweight", "Light middleweight", "Su
 
 export default {
   slug,
+  recipes: true,
+  kind: "boxing",
   sim: "boxing",
   blurb: "A seven-bout card live all night. The timekeeper runs the rounds, three judges score on their own cards, and fans vote on every round with a reason.",
   codes: [
@@ -20,31 +22,34 @@ export default {
     { role: "judge", subject: "J3", label: "Judge 3", code: "FGHJUDC4N9P2" },
     { role: "referee", subject: "R1", label: "Referee and timekeeper", code: "FGHREFA5Q3R4" },
   ],
-  build(now) {
+  build(now, recipe = {}) {
+    const r = recipeOf("boxing", recipe);
     const rand = rng(4404);
     const namer = personNamer(rand);
-    const doc = blankEvent({ slug, name: "Fight Night", sport: "boxing", date: londonParts(now).date });
-    doc.venue = "The Foundry Hall";
-    doc.about = "Seven bouts of white-collar boxing, three two-minute rounds each and a five-round main event. Judges score every round on the ten-point must system, and fans vote for the round winner.";
+    const doc = blankEvent({ slug, name: r.name || "Fight Night", sport: "boxing", date: londonParts(now).date });
+    doc.venue = r.venue || "The Foundry Hall";
+    doc.about = r.about || "Seven bouts of white-collar boxing, three two-minute rounds each and a five-round main event. Judges score every round on the ten-point must system, and fans vote for the round winner.";
+    doc.settings.terms = r.terms || { discipline: "White-collar boxing" };
     doc.phase = "live";
     doc.theme.accent = "#f7b613";
     doc.settings.vote = { open: true };
     doc.settings.lockSecs = 60;
+    const JUDGES = ["Dana Whitcombe", "Ravi Menon", "Helen Brightwell", "Marcus Oduya", "Lena Fairweather"];
+    const judgeIds = Array.from({ length: r.judges ?? 3 }, (_, i) => `J${i + 1}`);
     doc.officials = [
-      { id: "J1", name: "Dana Whitcombe", role: "judge", pitch: null },
-      { id: "J2", name: "Ravi Menon", role: "judge", pitch: null },
-      { id: "J3", name: "Helen Brightwell", role: "judge", pitch: null },
+      ...judgeIds.map((id, i) => ({ id, name: JUDGES[i], role: "judge", pitch: null })),
       { id: "R1", name: "Sam Whitfield", role: "referee", pitch: null },
     ];
-    const titles = ["Opening bout", "Bout 2", "Exhibition", "Bout 4", "Bout 5", "Co-main event", "Main event"];
-    doc.card.bouts = titles.map((title, i) => {
-      const main = i === titles.length - 1;
-      const exhibition = title === "Exhibition";
-      const clubs = [pick(rand, CLUBS), pick(rand, CLUBS)];
-      if (clubs[0] === clubs[1]) clubs[1] = CLUBS[(CLUBS.indexOf(clubs[0]) + 1) % CLUBS.length];
+    const clubPool = r.clubs || CLUBS;
+    // The card: the recipe's bouts, or seven white-collar bouts with an exhibition and a main event.
+    const plan = r.bouts || ["Opening bout", "Bout 2", "Exhibition", "Bout 4", "Bout 5", "Co-main event", "Main event"].map((title, i, all) => ({ title, rounds: i === all.length - 1 ? 5 : 3, roundMins: 2, scoring: title === "Exhibition" ? "none" : "judges" }));
+    doc.card.bouts = plan.map((b, i) => {
+      const scored = (b.scoring || "judges") === "judges" && judgeIds.length > 0;
+      const clubs = [pick(rand, clubPool), pick(rand, clubPool)];
+      if (clubs[0] === clubs[1]) clubs[1] = clubPool[(clubPool.indexOf(clubs[0]) + 1) % clubPool.length];
       return {
-        id: `B${i + 1}`, order: i + 1, title, weight: pick(rand, WEIGHTS),
-        rounds: main ? 5 : 3, roundMins: 2, scoring: exhibition ? "none" : "judges", judges: exhibition ? [] : ["J1", "J2", "J3"],
+        id: `B${i + 1}`, order: i + 1, title: String(b.title || `Bout ${i + 1}`).slice(0, 60), weight: String(b.weight || pick(rand, WEIGHTS)).slice(0, 40),
+        rounds: b.rounds || 3, roundMins: b.roundMins || 2, scoring: scored ? "judges" : "none", judges: scored ? judgeIds : [],
         red: { name: namer(), club: clubs[0] }, blue: { name: namer(), club: clubs[1] },
         state: "scheduled", round: 0, result: null,
       };
