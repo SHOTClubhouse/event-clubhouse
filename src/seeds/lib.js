@@ -5,6 +5,7 @@
 import { blankEvent, validate } from "../../public/core/model.js";
 import { generate } from "../../public/core/generator.js";
 import { londonParts } from "../util.js";
+import { addMins } from "../../public/core/model.js";
 
 // A small seeded random generator (mulberry32), so a seed builds the same way every time.
 export function rng(seed) {
@@ -68,17 +69,31 @@ export function footballDoc(o) {
   // one referee per pitch: the seed's own names first, invented ones for any extra pitches
   const refs = o.pitches.map((_, i) => (o.refs && o.refs[i]) || namer());
   doc.officials = refs.map((name, i) => ({ id: `R${i + 1}`, name, role: "referee", pitch: `P${i + 1}` }));
-  const teams = o.teams.map((name, i) => ({ id: `T${i + 1}`, name }));
-  const g = generate({
-    teams, format: o.format, groups: o.groups, advance: o.advance, legs: 1, thirdPlace: !!o.thirdPlace,
-    start: o.start, gameMins: o.gameMins, gapMins: o.gapMins, minRest: 1,
-    pitches: doc.pitches.map((p) => p.id), refs: doc.officials.map((r) => r.id), refMode: "pitch", division: "main", idPrefix: "M",
-  });
-  if (!g.ok) throw new Error(`seed ${o.slug}: ${g.errors.join(" ")}`);
   const [lo, hi] = Array.isArray(o.squad) ? o.squad : [6, 8];
-  doc.divisions = [{ id: "main", name: o.division, format: o.format, teams: g.teams.map((t) => ({ ...t, players: squad(rand, namer, between(rand, lo, hi)) })) }];
-  doc.fixtures = g.fixtures;
-  return { doc, rand, generated: g };
+  // One division, or several (age groups, a men's and women's draw) sharing the pitches: each
+  // division gets its own pitches when there are enough, otherwise they play one after another.
+  const plan = Array.isArray(o.divisions) && o.divisions.length
+    ? o.divisions.map((v, i) => ({ id: `D${i + 1}`, prefix: `D${i + 1}-`, name: v.name, teams: v.teams, format: v.format || o.format, groups: v.groups ?? o.groups, advance: v.advance ?? o.advance, thirdPlace: v.thirdPlace ?? o.thirdPlace }))
+    : [{ id: "main", prefix: "", name: o.division, teams: o.teams, format: o.format, groups: o.groups, advance: o.advance, thirdPlace: o.thirdPlace }];
+  const own = doc.pitches.length >= plan.length;
+  let start = o.start, n = 0, last = null;
+  doc.divisions = [];
+  doc.fixtures = [];
+  plan.forEach((v, i) => {
+    const pitches = own ? doc.pitches.filter((_, k) => k % plan.length === i) : doc.pitches;
+    const teams = v.teams.map((name) => ({ id: `T${++n}`, name }));
+    const g = generate({
+      teams, format: v.format, groups: v.groups, advance: v.advance, legs: 1, thirdPlace: !!v.thirdPlace,
+      start, gameMins: o.gameMins, gapMins: o.gapMins, minRest: 1,
+      pitches: pitches.map((p) => p.id), refs: doc.officials.filter((r) => pitches.some((p) => p.id === r.pitch)).map((r) => r.id), refMode: "pitch", division: v.id, idPrefix: "M",
+    });
+    if (!g.ok) throw new Error(`seed ${o.slug} ${v.name}: ${g.errors.join(" ")}`);
+    doc.divisions.push({ id: v.id, name: v.name, format: v.format, teams: g.teams.map((t) => ({ ...t, players: squad(rand, namer, between(rand, lo, hi)) })) });
+    doc.fixtures.push(...g.fixtures.map((f) => ({ ...f, id: `${v.prefix}${f.id}` })));
+    if (!own) start = addMins(g.summary.ends, o.gapMins || 0);
+    last = g;
+  });
+  return { doc, rand, generated: last };
 }
 
 export function check(doc) {
@@ -93,7 +108,7 @@ export const withPrivate = (doc, seed) => { doc.private = { demo: { seed } }; re
 // A recipe changes only the parts of a seed listed here (names, format, timings, wording), so
 // it can never change what a demo is. Each seed merges a recipe over its own defaults.
 export const RECIPE_KEYS = {
-  football: ["name", "venue", "about", "teams", "division", "format", "groups", "advance", "thirdPlace", "gameMins", "gapMins", "pitches", "voteBy", "terms", "squad", "juniors"],
+  football: ["name", "venue", "about", "teams", "divisions", "division", "format", "groups", "advance", "thirdPlace", "gameMins", "gapMins", "pitches", "voteBy", "terms", "squad", "juniors"],
   boxing: ["name", "venue", "about", "bouts", "judges", "terms", "clubs", "rings", "juniors"],
 };
 
@@ -114,6 +129,7 @@ export function recipeErrors(kind, r) {
   const names = (v, lo, hi, max) => Array.isArray(v) && v.length >= lo && v.length <= hi && v.every((x) => typeof x === "string" && x.trim() && x.length <= max);
   if (kind === "football") {
     if (r.teams !== undefined && !names(r.teams, 2, 32, 40)) e.push("recipe.teams: 2 to 32 team names, 40 characters or fewer");
+    if (r.divisions !== undefined && !(Array.isArray(r.divisions) && r.divisions.length >= 1 && r.divisions.length <= 6 && r.divisions.every((v) => v && typeof v.name === "string" && v.name.trim() && v.name.length <= 40 && names(v.teams, 2, 32, 40)))) e.push("recipe.divisions: 1 to 6 divisions, each with a name and 2 to 32 team names");
     if (r.pitches !== undefined && !names(r.pitches, 1, 8, 40)) e.push("recipe.pitches: 1 to 8 names, 40 characters or fewer");
     if (r.juniors !== undefined && typeof r.juniors !== "boolean") e.push("recipe.juniors: true or false");
     if (r.squad !== undefined && !(Array.isArray(r.squad) && r.squad.length === 2 && r.squad.every(Number.isInteger) && r.squad[0] >= 1 && r.squad[0] <= r.squad[1] && r.squad[1] <= 20)) e.push("recipe.squad: [smallest, largest] squad, up to 20");
