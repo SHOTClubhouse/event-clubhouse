@@ -5,7 +5,7 @@ import { winnerOf } from "../core/standings.js";
 import { h, field, input, select, btn, msgBox, showMsg, withBusy, plainError, confirmBox, plural, empty } from "./admin-lib.js";
 import { generator } from "./admin-generator.js";
 import { pitchName, officialName } from "./ui.js";
-import { toMins, addMins, firstName } from "../core/model.js";
+import { toMins, addMins, firstName, terms } from "../core/model.js";
 
 let view = "generator"; // generator | games
 let genDivision = null;
@@ -72,8 +72,8 @@ function gameCard(ctx, d, f) {
   const lbl = `${f.home} v ${f.away}`;
   const time = input({ type: "time", value: f.time, "aria-label": `Kick-off time for game ${f.id}`, key: `fx-${f.id}-time` });
   time.addEventListener("change", () => edit({ time: time.value }, "Time saved."));
-  const pitch = select([["", "No pitch"], ...ev.pitches.map((p) => [p.id, p.name])], f.pitch || "", { "aria-label": `Pitch for game ${f.id}`, key: `fx-${f.id}-pitch` });
-  pitch.addEventListener("change", () => edit({ pitch: pitch.value || null }, "Pitch saved."));
+  const pitch = select([["", `No ${terms(ev).place}`], ...ev.pitches.map((p) => [p.id, p.name])], f.pitch || "", { "aria-label": `${terms(ev).Place} for game ${f.id}`, key: `fx-${f.id}-pitch` });
+  pitch.addEventListener("change", () => edit({ pitch: pitch.value || null }, `${terms(ev).Place} saved.`));
   const refs = ev.officials.filter((o) => o.role === "referee");
   const ref = select([["", "No referee"], ...refs.map((r) => [r.id, r.name])], f.ref || "", { "aria-label": `Referee for game ${f.id}`, key: `fx-${f.id}-ref` });
   ref.addEventListener("change", () => edit({ ref: ref.value || null }, "Referee saved."));
@@ -119,7 +119,7 @@ function gameCard(ctx, d, f) {
     h("div", { class: "ecx-game__top" },
       h("span", { class: "ec-caps ecx-game__id", text: `${f.id}${f.stage ? ` · ${f.stage}` : ""}` }),
       h("span", { class: `ec-badge ${live ? "ec-badge--live" : f.state === "ft" ? "ec-badge--ft" : ""}`, text: STATE_TEXT[f.state] })),
-    h("div", { class: "ecx-game__cfg" }, field("Time", time), field("Pitch", pitch), field("Referee", ref)),
+    h("div", { class: "ecx-game__cfg" }, field("Time", time), field(terms(ev).Place, pitch), field("Referee", ref)),
     h("div", { class: "ecx-game__sides" }, field("Home", side("home")), h("div", { class: "ecx-game__score" }, hs, h("span", { "aria-hidden": "true", text: "–" }), as), field("Away", side("away"))),
     h("div", { class: "ecx-game__acts" },
       field("Status", st), pens ? field("Penalties", pens) : null,
@@ -134,7 +134,7 @@ function addGame(ctx) {
   const last = ev.fixtures.filter((f) => f.division === d0.id).map((f) => f.time).sort((a, b) => toMins(a) - toMins(b)).pop();
   const div = select(ev.divisions.map((d) => [d.id, d.name]), d0.id, { key: "add-div" });
   const time = input({ type: "time", value: last ? addMins(last, 12) : "10:00" });
-  const pitch = select([["", "No pitch"], ...ev.pitches.map((p) => [p.id, p.name])], ev.pitches[0] ? ev.pitches[0].id : "");
+  const pitch = select([["", `No ${terms(ev).place}`], ...ev.pitches.map((p) => [p.id, p.name])], ev.pitches[0] ? ev.pitches[0].id : "");
   const ref = select([["", "No referee"], ...ev.officials.filter((o) => o.role === "referee").map((r) => [r.id, r.name])], "");
   const home = h("span", { class: "ecx-sidepick" }), away = h("span", { class: "ecx-sidepick" });
   const stage = input({ maxlength: "30", placeholder: "Final, or leave empty" });
@@ -160,7 +160,7 @@ function addGame(ctx) {
         if (r.ok) ctx.dirty = false; else showMsg(msg, plainError(r.error));
       });
     } },
-    h("div", { class: "ecx-fields" }, ev.divisions.length > 1 ? field("Division", div) : null, field("Kick-off", time), field("Pitch", pitch), field("Referee", ref)),
+    h("div", { class: "ecx-fields" }, ev.divisions.length > 1 ? field("Division", div) : null, field("Kick-off", time), field(terms(ev).Place, pitch), field("Referee", ref)),
     h("div", { class: "ecx-fields" }, home, away, field("Stage (optional)", stage, "Add a name for a knockout game, like Final. Leave empty for a normal game.")),
     msg, go));
 }

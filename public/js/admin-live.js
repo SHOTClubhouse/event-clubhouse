@@ -1,7 +1,7 @@
 // Live control: the vote switch, stream links (event and per pitch) with what each link will do,
 // and a live board of every game or bout with quick overrides.
 
-import { streamInfo } from "../core/model.js";
+import { streamInfo, terms } from "../core/model.js";
 import { h, field, input, btn, msgBox, showMsg, withBusy, plainError, plural, empty } from "./admin-lib.js";
 import { side, pitchName } from "./ui.js";
 import { boutControls, boutName, boutState, cardsSummary, resultText } from "./admin-bouts.js";
@@ -28,7 +28,7 @@ export function live(ctx) {
     voteCard(ctx),
     h("section", { class: "ecx-stack", "aria-labelledby": "h-streams" },
       h("h3", { class: "ec-d3", id: "h-streams", text: "Streams" }),
-      h("p", { class: "ec-small ec-muted", text: ev.sport === "football" ? "One stream for the whole event, and a stream for each pitch. Fans see the pitch stream on that pitch's games." : "One stream for the whole event." }),
+      h("p", { class: "ec-small ec-muted", text: ev.sport === "football" ? `One stream for the whole event, and a stream for each ${terms(ev).place}. Fans see the ${terms(ev).place} stream on that ${terms(ev).place}'s games.` : "One stream for the whole event." }),
       h("div", { class: "ecx-streams" }, streamCard(ctx, "Event stream", ev.stream, null), ev.sport === "football" ? ev.pitches.map((p) => streamCard(ctx, p.name, p.stream, p.id)) : null)),
     board(ctx));
 }
@@ -50,7 +50,7 @@ function voteCard(ctx) {
 function streamCard(ctx, title, stream, pitch) {
   const st = stream || { url: null, on: false, label: "" };
   const url = input({ type: "url", value: st.url || "", placeholder: "https://www.youtube.com/watch?v=…", inputmode: "url", spellcheck: "false", key: `st-${pitch || "event"}-url` });
-  const label = input({ value: st.label || "", maxlength: "80", placeholder: "Live from the main pitch" });
+  const label = input({ value: st.label || "", maxlength: "80", placeholder: `Live from the main ${terms(ctx.event).place}` });
   const verdict = h("p", { class: "ecx-verdict", role: "status" });
   const showV = () => { const v = streamVerdict(url.value, label.value); verdict.textContent = v.text; verdict.className = `ecx-verdict ecx-verdict--${v.kind}`; };
   url.addEventListener("input", showV); showV();
@@ -98,8 +98,8 @@ function gameRow(ctx, f) {
     return ctx.save([{ op: "fixture.score", id: f.id, home: cur.home, away: cur.away }], { success: "Score updated." });
   };
   const ctl = (which, name) => h("div", { class: "ecx-stepper" },
-    btn("−", () => score(which, -1), { cls: "ec-btn--ghost ecx-step", key: `lv-${f.id}-${which}-minus`, disabled: (which === "home" ? f.homeScore : f.awayScore) == null || (which === "home" ? f.homeScore : f.awayScore) === 0, label: `Take a goal off ${name}` }),
-    btn("+", () => score(which, 1), { cls: "ecx-step", key: `lv-${f.id}-${which}-plus`, label: `Add a goal for ${name}` }));
+    btn("−", () => score(which, -1), { cls: "ec-btn--ghost ecx-step", key: `lv-${f.id}-${which}-minus`, disabled: (which === "home" ? f.homeScore : f.awayScore) == null || (which === "home" ? f.homeScore : f.awayScore) === 0, label: `Take a ${terms(ev).score} off ${name}` }),
+    btn("+", () => score(which, 1), { cls: "ecx-step", key: `lv-${f.id}-${which}-plus`, label: `Add a ${terms(ev).score} for ${name}` }));
   const set = (state, label) => btn(label, () => ctx.save([{ op: "fixture.state", id: f.id, state }], { success: state === "live" ? "Game started." : state === "ft" ? "Full time." : "Game back to not started." }), { cls: state === "ft" ? "ec-btn--gold ec-btn--sm" : "ec-btn--sm", key: `lv-${f.id}-${state}`, label: `${label}: ${a.text} v ${b.text}` });
   const level = f.stage && f.state === "ft" && f.homeScore === f.awayScore;
   return h("article", { class: `ecx-lg${f.state === "live" ? " is-live" : ""}`, "aria-label": `${a.text} v ${b.text}` },

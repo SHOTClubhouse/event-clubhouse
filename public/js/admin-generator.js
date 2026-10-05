@@ -3,7 +3,7 @@
 // core's: checkOptions() for the errors, generate() for the games, fixtures.replace to save.
 
 import { checkOptions, generate } from "../core/generator.js";
-import { toMins } from "../core/model.js";
+import { toMins, terms } from "../core/model.js";
 import { h, field, input, select, check, btn, msgBox, showMsg, withBusy, plainError, confirmBox, plural, letters } from "./admin-lib.js";
 
 const states = new Map(); // division id -> options, so a redraw (or a poll) never loses them
@@ -38,7 +38,7 @@ export function buildOptions(ev, div, s) {
 }
 
 export function generator(ctx, div, { onApplied }) {
-  const ev = ctx.event;
+  const ev = ctx.event, T = terms(ev);
   if (!states.has(div.id)) states.set(div.id, defaults(div));
   const s = states.get(div.id);
   const root = h("div", { class: "ecx-gen" });
@@ -70,9 +70,9 @@ export function generator(ctx, div, { onApplied }) {
     });
 
     const refs = ev.officials.filter((o) => o.role === "referee");
-    const mode = select([["pitch", "One referee per pitch"], ["rotate", "Rotate through the referees"], ["none", "No referees yet"]], s.refMode, { key: "gen-refmode" });
+    const mode = select([["pitch", `One referee per ${T.place}`], ["rotate", "Rotate through the referees"], ["none", "No referees yet"]], s.refMode, { key: "gen-refmode" });
     mode.addEventListener("change", () => { s.refMode = mode.value; redraw("gen-refmode"); });
-    const refBoxes = refs.map((r) => check(r.pitch ? `${r.name} (${(ev.pitches.find((p) => p.id === r.pitch) || {}).name || "pitch"})` : r.name, { checked: !s.refIds || s.refIds.includes(r.id), onchange: (e) => {
+    const refBoxes = refs.map((r) => check(r.pitch ? `${r.name} (${(ev.pitches.find((p) => p.id === r.pitch) || {}).name || T.place})` : r.name, { checked: !s.refIds || s.refIds.includes(r.id), onchange: (e) => {
       const cur = s.refIds || refs.map((x) => x.id);
       s.refIds = e.target.checked ? [...new Set([...cur, r.id])] : cur.filter((x) => x !== r.id);
       drawPreview();
@@ -86,7 +86,7 @@ export function generator(ctx, div, { onApplied }) {
       s.format === "league" ? field("Legs", select([["1", "Play each other once"], ["2", "Home and away (twice)"]], String(s.legs), { key: "gen-legs", onchange: (e) => { s.legs = Number(e.target.value); drawPreview(); } })) : null,
       s.format !== "league" ? check("Add a third-place game", { checked: s.thirdPlace, onchange: (e) => { s.thirdPlace = e.target.checked; drawPreview(); } }) : null,
       h("div", { class: "ecx-fields" }, field("First kick-off", start), numField("Game length (minutes)", "gameMins", { min: "1", max: "120" }), numField("Gap between games (minutes)", "gapMins", { min: "0", max: "60" }), numField("Rest slots between a team's games", "minRest", { min: "0", max: "10", help: "A slot is one game plus the gap." })),
-      h("fieldset", { class: "ecx-fieldset" }, h("legend", { text: "Pitches to use" }), ev.pitches.length ? h("div", { class: "ecx-checks" }, pitchBoxes) : h("p", { class: "ec-error", text: "Add a pitch first (Pitches and officials)." })),
+      h("fieldset", { class: "ecx-fieldset" }, h("legend", { text: `${T.Places} to use` }), ev.pitches.length ? h("div", { class: "ecx-checks" }, pitchBoxes) : h("p", { class: "ec-error", text: `Add a ${T.place} first (${T.Places} and officials).` })),
       field("Referees", mode),
       s.refMode !== "none" ? h("fieldset", { class: "ecx-fieldset" }, h("legend", { text: "Which referees" }), refs.length ? h("div", { class: "ecx-checks" }, refBoxes) : h("p", { class: "ec-small ec-muted", text: "No referees added yet. Games will have none until you add them." })) : null);
   }
@@ -104,7 +104,7 @@ export function generator(ctx, div, { onApplied }) {
     const res = generate(opts);
     if (!res.ok) { preview.replaceChildren(h("p", { class: "ec-error", text: res.errors[0] })); return; }
     const notes = [];
-    if (s.refMode === "pitch" && opts.refs.length && opts.refs.length < opts.pitches.length) notes.push("There are fewer referees than pitches, so referees will rotate.");
+    if (s.refMode === "pitch" && opts.refs.length && opts.refs.length < opts.pitches.length) notes.push(`There are fewer referees than ${T.places}, so referees will rotate.`);
     if (s.refMode !== "none" && !opts.refs.length) notes.push("No referees are selected, so games will not have a referee.");
     if (s.format === "groups-knockout") {
       const sizes = letters(Math.max(1, s.groups)).map((g) => res.teams.filter((t) => (t.group || "") === (s.groups === 1 ? "" : g)).length);
@@ -154,6 +154,7 @@ const sumTile = (n, label) => h("div", { class: "ecx-sum" }, h("strong", { text:
 function groupClass(letter) { return letter ? `ecx-g${(letter.charCodeAt(0) - 65) % 8}` : "ecx-g0"; }
 
 function timetable(ev, res, opts) {
+  const T = terms(ev);
   const teamName = Object.fromEntries(res.teams.map((t) => [t.id, t.name]));
   const group = Object.fromEntries(res.teams.map((t) => [t.id, t.group]));
   const nameOf = (r) => teamName[r] || r;
@@ -162,9 +163,9 @@ function timetable(ev, res, opts) {
   const times = [...new Set(res.fixtures.map((f) => f.time))].sort((a, b) => slot(a) - slot(b));
   const cell = new Map(res.fixtures.map((f) => [`${f.time}|${f.pitch}`, f]));
   const refName = (id) => ((ev.officials.find((o) => o.id === id) || {}).name || "");
-  return h("div", { class: "ecx-tt ec-scroll", role: "region", "aria-label": "Timetable preview. Scroll sideways to see every pitch.", tabindex: "0" },
+  return h("div", { class: "ecx-tt ec-scroll", role: "region", "aria-label": `Timetable preview. Scroll sideways to see every ${T.place}.`, tabindex: "0" },
     h("table", { class: "ecx-tt__table" },
-      h("caption", { class: "ecx-sr", text: "Timetable preview: rows are kick-off times, columns are pitches." }),
+      h("caption", { class: "ecx-sr", text: `Timetable preview: rows are kick-off times, columns are ${T.places}.` }),
       h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Time" }), opts.pitches.map((p) => h("th", { scope: "col", text: (ev.pitches.find((x) => x.id === p) || {}).name || p })))),
       h("tbody", {}, times.map((t) => h("tr", {}, h("th", { scope: "row", class: "ec-mono", text: t }),
         opts.pitches.map((p) => {

@@ -1,6 +1,7 @@
 // Access codes: issue codes for the organiser team, referees, judges and coaches. A new code is
 // shown once with a ready-to-send message. Existing codes can be revoked.
 
+import { terms } from "../core/model.js";
 import { h, field, input, select, btn, msgBox, showMsg, withBusy, plainError, confirmBox, copyText, tokenCodeId, fmtDateTime, plural, SITE, empty, skeleton } from "./admin-lib.js";
 
 const revealed = []; // codes issued this visit: { id, role, label, code }
@@ -70,7 +71,7 @@ function issueForm(ctx, { teams, refs, judges }) {
     subjectWrap.hidden = false;
     const nm = role.value === "coach" ? "team" : role.value;
     if (!list.length) {
-      subjectWrap.append(h("p", { class: "ec-small ec-muted", text: role.value === "coach" ? "Add teams first (Teams)." : `Add a ${nm} first (Pitches and officials).` }));
+      subjectWrap.append(h("p", { class: "ec-small ec-muted", text: role.value === "coach" ? "Add teams first (Teams)." : `Add a ${nm} first (${terms(ev).Places} and officials).` }));
       subject.replaceChildren(); subject.value = "";
     } else {
       subject.replaceChildren(...list.map((x) => h("option", { value: x.id, text: x.name })));

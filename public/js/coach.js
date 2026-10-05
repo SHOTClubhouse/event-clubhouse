@@ -4,6 +4,7 @@
 import { ApiError, fullEvent, sendOps, session, sessionsFor, signOut, watchEvent } from "./api.js";
 import { $, applyTheme, esc, officialName, pitchName, plural, side, toast } from "./ui.js";
 import { tables, winnerOf } from "../core/standings.js";
+import { terms } from "../core/model.js";
 import { formatCode, signInHtml, trySignIn } from "./ref-auth.js";
 
 const app = $("#app");
@@ -119,11 +120,11 @@ function nextBanner(event, mine, teamId) {
 function tableHtml(event, found) {
   const { div, team: t } = found;
   const tabs = tables(div, event.fixtures, event.settings.points);
-  const tab = tabs.find((x) => x.rows.some((r) => r.id === t.id));
+  const tab = tabs.find((x) => x.rows.some((r) => r.id === t.id)), T = terms(event);
   const hasGroupGames = event.fixtures.some((f) => f.division === div.id && !f.stage);
   if (!tab || !hasGroupGames) return '<div class="ec-empty">No table for this event. It is all knockouts.</div>';
   return `<div class="ecc-tablewrap"><table class="ec-table ecc-table"><caption class="ecr-sr">${esc(tab.group ? `Group ${tab.group} table` : "Table")}</caption>
-    <thead><tr><th scope="col" class="num">#</th><th scope="col">Team</th><th scope="col" class="num">P</th><th scope="col" class="num ecc-opt">W</th><th scope="col" class="num ecc-opt">D</th><th scope="col" class="num ecc-opt">L</th><th scope="col" class="num">GD</th><th scope="col" class="num">Pts</th></tr></thead>
+    <thead><tr><th scope="col" class="num">#</th><th scope="col">Team</th><th scope="col" class="num">P</th><th scope="col" class="num ecc-opt">W</th><th scope="col" class="num ecc-opt">D</th><th scope="col" class="num ecc-opt">L</th><th scope="col" class="num"><abbr title="${esc(T.diff.title)}">${esc(T.diff.abbr)}</abbr></th><th scope="col" class="num">Pts</th></tr></thead>
     <tbody>${tab.rows.map((r, i) => `<tr class="${r.id === t.id ? "is-me" : ""}"><td class="num">${i + 1}</td><th scope="row" class="ecc-tn">${esc(r.name)}${r.id === t.id ? ' <span class="ecc-you">You</span>' : ""}</th><td class="num">${r.p}</td><td class="num ecc-opt">${r.w}</td><td class="num ecc-opt">${r.d}</td><td class="num ecc-opt">${r.l}</td><td class="num">${r.gd > 0 ? "+" : ""}${r.gd}</td><td class="num"><strong>${r.pts}</strong></td></tr>`).join("")}</tbody></table></div>
     <p class="ec-help">${esc(tab.group ? `Group ${tab.group}.` : "")} Only finished games count.</p>`;
 }

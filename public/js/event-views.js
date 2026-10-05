@@ -63,7 +63,7 @@ export function headerHtml(ev) {
   return `<div class="ece-wrap ece-head__in">
     <div class="ece-toprow"><div class="ece-lock">${lock}</div><button type="button" class="ece-share" data-share aria-label="Share this event"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v14"/></svg>Share</button></div>
     <h1 class="ece-title">${esc(ev.name)}</h1>
-    <p class="ece-meta">${live}${ev.date ? `<span>${esc(fmtDate(ev.date))}</span>` : ""}${ev.venue ? `<span>${esc(ev.venue)}</span>` : ""}</p>
+    <p class="ece-meta">${live}${ev.date ? `<span>${esc(fmtDate(ev.date))}</span>` : ""}${ev.venue ? `<span>${esc(ev.venue)}</span>` : ""}${terms(ev).discipline ? `<span class="ece-disc">${esc(terms(ev).discipline)}</span>` : ""}</p>
     <p class="ece-fresh" id="fresh"></p>
   </div>`;
 }
@@ -102,7 +102,7 @@ export function gameCard(ev, f, S, o = {}) {
 
 // ---- NOW (football) ----
 export function nowFootball(S) {
-  const ev = S.event, fx = ev.fixtures;
+  const ev = S.event, fx = ev.fixtures, T = terms(ev);
   if (!fx.length) return empty("Fixtures to follow", "The schedule will appear here as soon as the organiser publishes it.");
   const out = [];
   const mine = S.follow ? fx.filter((f) => f.state !== "ft" && [side(ev, f, "home").id, side(ev, f, "away").id].includes(S.follow)).sort((a, b) => (b.state === "live") - (a.state === "live") || byTime(a, b))[0] : null;
@@ -118,7 +118,7 @@ export function nowFootball(S) {
     if (!live.length && !next.length) return;
     out.push(`<section class="ece-sec" aria-labelledby="h-${esc(g.id || "x")}"><h2 id="h-${esc(g.id || "x")}" class="ece-h">${esc(g.name)}${live.length ? ` <span class="ece-h__n">${live.length} live</span>` : ""}</h2>
       ${live.map((f) => gameCard(ev, f, S, { big: true, pitch: false })).join("")}
-      ${live.length ? "" : `<p class="ece-note">Between games on this pitch.</p>`}
+      ${live.length ? "" : `<p class="ece-note">Between games on this ${T.place}.</p>`}
       ${next.length ? `<h3 class="ece-h3">Up next</h3>${next.map((f) => gameCard(ev, f, S, { pitch: false })).join("")}` : ""}</section>`);
   });
   if (!anyLive && out.length === (mine ? 1 : 0)) out.push(empty("No games on right now", "Check the schedule for what is next."));
@@ -182,10 +182,10 @@ export function cardView(S) {
 
 // ---- Schedule ----
 export function scheduleView(S) {
-  const ev = S.event, f = S.filters;
+  const ev = S.event, f = S.filters, T = terms(ev);
   if (!ev.fixtures.length) return empty("Fixtures to follow", "The schedule will appear here as soon as the organiser publishes it.");
   const teams = allTeams(ev);
-  const pitches = ev.pitches.length > 1 ? `<div class="ece-seg" role="group" aria-label="Filter by pitch">${[["all", "All pitches"], ...ev.pitches.map((p) => [p.id, p.name])].map(([id, n]) => `<button type="button" data-k="fp-${esc(id)}" data-fpitch="${esc(id)}" aria-pressed="${f.pitch === id}">${esc(n)}</button>`).join("")}</div>` : "";
+  const pitches = ev.pitches.length > 1 ? `<div class="ece-seg" role="group" aria-label="Filter by ${T.place}">${[["all", `All ${T.places}`], ...ev.pitches.map((p) => [p.id, p.name])].map(([id, n]) => `<button type="button" data-k="fp-${esc(id)}" data-fpitch="${esc(id)}" aria-pressed="${f.pitch === id}">${esc(n)}</button>`).join("")}</div>` : "";
   const divs = ev.divisions.length > 1 ? `<div class="ec-field"><label for="f-div">Division</label><select id="f-div" data-k="f-div" class="ec-select" data-fdiv><option value="all">All divisions</option>${ev.divisions.map((d) => `<option value="${esc(d.id)}"${f.div === d.id ? " selected" : ""}>${esc(d.name)}</option>`).join("")}</select></div>` : "";
   const team = `<div class="ec-field"><label for="f-team">My team</label><select id="f-team" data-k="f-team" class="ec-select" data-follow><option value="">Not following a team</option>${teams.map((t) => `<option value="${esc(t.id)}"${S.follow === t.id ? " selected" : ""}>${esc(t.name)}${ev.divisions.length > 1 ? ` (${esc(t.divisionName)})` : ""}</option>`).join("")}</select></div>`;
   let list = [...ev.fixtures].sort(byTime);
@@ -193,7 +193,7 @@ export function scheduleView(S) {
   if (f.div !== "all") list = list.filter((x) => x.division === f.div);
   if (S.follow && f.mineOnly) list = list.filter((x) => [side(ev, x, "home").id, side(ev, x, "away").id].includes(S.follow));
   const slots = [...new Set(list.map((x) => x.time))];
-  const body = list.length ? slots.map((t) => `<section class="ece-slot" aria-label="${esc(t)}"><h3 class="ece-slot__t">${esc(t)}</h3>${list.filter((x) => x.time === t).map((x) => gameCard(ev, x, S, { division: f.div === "all" })).join("")}</section>`).join("") : empty("No games match", "Try another pitch or division.");
+  const body = list.length ? slots.map((t) => `<section class="ece-slot" aria-label="${esc(t)}"><h3 class="ece-slot__t">${esc(t)}</h3>${list.filter((x) => x.time === t).map((x) => gameCard(ev, x, S, { division: f.div === "all" })).join("")}</section>`).join("") : empty("No games match", "Try another ${T.place} or division.");
   return `<section class="ece-sec"><h2 class="ece-h">Schedule</h2><div class="ece-filters">${pitches}<div class="ece-filters__sel">${team}${divs}</div>
     ${S.follow ? `<label class="ece-switch"><input type="checkbox" data-k="f-mine" data-mine${f.mineOnly ? " checked" : ""}><span>Show only my team</span></label>` : ""}</div>${body}</section>`;
 }
@@ -208,10 +208,10 @@ export function resultsView(S) {
 
 // ---- Tables ----
 export function tablesView(S) {
-  const ev = S.event;
+  const ev = S.event, T = terms(ev);
   const blocks = ev.divisions.filter((d) => d.format !== "exhibition" && d.format !== "knockout" && d.teams.length).flatMap((d) =>
     tables(d, ev.fixtures, ev.settings.points).map((t) => `<section class="ece-sec"><h2 class="ece-h">${esc(ev.divisions.length > 1 ? `${d.name}${t.group ? ", " : ""}` : "")}${t.group ? `Group ${esc(t.group)}` : ev.divisions.length > 1 ? "" : "Table"}</h2>
-      <div class="ece-tablewrap"><table class="ec-table ece-table"><caption class="ece-sr">${esc(d.name)} ${t.group ? `group ${esc(t.group)} ` : ""}table</caption><thead><tr><th scope="col">Team</th><th scope="col" class="num"><abbr title="Played">P</abbr></th><th scope="col" class="num"><abbr title="Won">W</abbr></th><th scope="col" class="num"><abbr title="Drawn">D</abbr></th><th scope="col" class="num"><abbr title="Lost">L</abbr></th><th scope="col" class="num"><abbr title="Goal difference">GD</abbr></th><th scope="col" class="num"><abbr title="Points">Pts</abbr></th></tr></thead><tbody>
+      <div class="ece-tablewrap"><table class="ec-table ece-table"><caption class="ece-sr">${esc(d.name)} ${t.group ? `group ${esc(t.group)} ` : ""}table</caption><thead><tr><th scope="col">Team</th><th scope="col" class="num"><abbr title="Played">P</abbr></th><th scope="col" class="num"><abbr title="Won">W</abbr></th><th scope="col" class="num"><abbr title="Drawn">D</abbr></th><th scope="col" class="num"><abbr title="Lost">L</abbr></th><th scope="col" class="num"><abbr title="${esc(T.diff.title)}">${esc(T.diff.abbr)}</abbr></th><th scope="col" class="num"><abbr title="Points">Pts</abbr></th></tr></thead><tbody>
       ${t.rows.map((r, i) => `<tr class="${S.follow === r.id ? "is-mine" : ""}"><th scope="row"><span class="ece-pos">${i + 1}</span>${esc(r.name)}</th><td class="num">${r.p}</td><td class="num">${r.w}</td><td class="num">${r.d}</td><td class="num">${r.l}</td><td class="num">${r.gd > 0 ? "+" : ""}${r.gd}</td><td class="num"><b>${r.pts}</b></td></tr>`).join("")}</tbody></table></div></section>`));
   return blocks.length ? blocks.join("") : empty("Tables to follow", "They fill in as games finish.");
 }
@@ -255,7 +255,7 @@ export function groupsView(S) {
 }
 
 // ---- Register ----
-import { consentText } from "../core/model.js";
+import { consentText, terms } from "../core/model.js";
 export { consentText };
 export function registerCard(S, o = {}) {
   const ev = S.event, r = S.reg || {};
@@ -281,7 +281,7 @@ export function registerCard(S, o = {}) {
 
 // ---- Pre: Home ----
 export function homeView(S) {
-  const ev = S.event, th = ev.theme || {};
+  const ev = S.event, th = ev.theme || {}, T = terms(ev);
   const n = daysTo(ev.date);
   const countdown = n == null ? "" : n === 0 ? "Today" : n === 1 ? "Tomorrow" : n > 1 ? `${n} days to go` : "";
   const f = isFootball(ev);
@@ -289,7 +289,7 @@ export function homeView(S) {
   const tiles = [];
   if (f && nTeams) tiles.push(["teams", String(nTeams), "teams"]);
   if (f && ev.fixtures.length) tiles.push(["schedule", String(ev.fixtures.length), "games"]);
-  if (f && ev.pitches.length) tiles.push(["schedule", String(ev.pitches.length), ev.pitches.length === 1 ? "pitch" : "pitches"]);
+  if (f && ev.pitches.length) tiles.push(["schedule", String(ev.pitches.length), ev.pitches.length === 1 ? T.place : T.places]);
   if (!f && nBouts) tiles.push(["card", String(nBouts), nBouts === 1 ? "bout" : "bouts"]);
   return `<section class="ece-hero"><p class="ec-kicker">Before the day</p>${countdown ? `<p class="ece-count">${esc(countdown)}</p>` : ""}
     ${ev.about ? `<p class="ece-about">${esc(ev.about)}</p>` : `<p class="ece-about">The line-up, the schedule and everything else for the day will be here. Register to hear first.</p>`}

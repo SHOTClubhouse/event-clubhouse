@@ -2,6 +2,7 @@
 // demo events a reset button.
 
 import { champion } from "../core/standings.js";
+import { terms } from "../core/model.js";
 import { resultText } from "../core/boxing.js";
 import { h, field, input, textarea, btn, msgBox, showMsg, withBusy, plainError, confirmBox, fmtDateTime, plural, empty, skeleton } from "./admin-lib.js";
 
@@ -42,7 +43,7 @@ function results(ctx) {
     const played = ev.fixtures.filter((f) => f.state === "ft").length;
     const goals = ev.fixtures.reduce((n, f) => n + (f.state !== "scheduled" && f.homeScore != null ? f.homeScore + f.awayScore : 0), 0);
     main = h("div", { class: "ecx-stack" },
-      h("p", { class: "ec-muted", text: `${played} of ${plural(ev.fixtures.length, "game")} played, ${plural(goals, "goal")} scored.` }),
+      h("p", { class: "ec-muted", text: `${played} of ${plural(ev.fixtures.length, "game")} played, ${plural(goals, terms(ev).score)} scored.` }),
       ev.divisions.length ? h("ul", { class: "ecx-list", "aria-label": "Champions" }, ev.divisions.map((d) => {
         const c = champion(d, ev.fixtures, ev.settings.points);
         const t = c && c.id ? d.teams.find((x) => x.id === c.id) : null;
