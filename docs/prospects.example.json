@@ -11,5 +11,12 @@
     "accent": "#f7b613",
     "seed": "fight-night",
     "logo": "https://example.com/logo.png"
+  },
+  {
+    "name": "Example Fitness Race",
+    "partner": "Example Gym",
+    "accent": "#1abc9c",
+    "seed": "fitness-race",
+    "recipe": { "heats": 6, "perHeat": 12, "gapMins": 5, "categories": ["Open Women", "Open Men"] }
   }
 ]

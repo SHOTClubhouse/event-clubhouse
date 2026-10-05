@@ -34,12 +34,27 @@ doc.comp = {
 }
 ```
 
+- A new event starts with an empty comp, so segments (0 to 20) and categories (0 to 16) may be empty while it is being set up. Entries and heats need their category to exist, so nothing else can be added first. Heats also carry `endedAt` (null or ms), set when the heat ends; the vote lock counts from it.
 - `ranking: "time"`: every segment has `measure: "time"`. `results[i]` is the whole seconds from the wave start to the end of segment i, so the values are cumulative and must not go down. The finish time is the last segment's result.
 - `ranking: "placings"`: `results[i]` is that workout's score. A `time` measure is lower-is-better; `reps` and `kg` are higher-is-better. Numbers run from 0 to 100000, and times are in whole seconds.
 - A bib is a whole number from 1 to 99999, unique in the event.
 - Ids match the model's `ID` rule and are unique within their list. An entry's category must exist. Its heat, if one is set, must exist, and a heat's category, if one is set, must match the entry's.
 - `settings.voteBy` decides how athletes appear in public: `number` shows "#101", `name` shows first names, and `both` shows "#101 Sam". For pairs, each name is cut to its first name: "Sam & Alex".
 - `settings.terms.discipline` is free text, e.g. "Fitness race". `settings.terms.place` may be "arena" (the default for fitness) or "floor". Add "floor" to PLACES.
+
+## Details settled in the build
+
+These are the points the contract above left open. The code and tests follow them.
+
+- **Names.** An entry name is 1 to 120 characters and a club up to 60. Pairs and relays join names with " & ". The public view keeps `id, bib, label, club, category, heat, results, state` for each entry and never the name. Referees get the full names plus the label; the admin gets the whole document.
+- **Leaderboard rows** also carry `ranks` in placings (the entry's rank in each segment, null when not scored). In placings `last` is the rank on the last segment (the tie-break) and `total` is null. `rank` is null when an entry is not ranked: in a timed race, ready, dnf and dns entries; in placings, dns entries and entries with nothing scored. Finished entries share a rank on equal times (1, 2, 2, 4), and racing entries are ranked after them by segments done, then latest split. In placings the order is total, so ranks are 1, 2, 3 and so on.
+- **Helpers.** `fmtTime` gives "-" for anything that is not a time. `segmentsDone(entry)` counts results, `currentSegment(entry)` is the index of the first missing result or null. `onCourse(doc)` returns `[{ heat, entries: [{ id, bib, label, state, done, current, segment, last }] }]` and `nextHeats(doc, n)` returns `[{ heat, entries: [{ id, bib, label }] }]`, scheduled heats earliest time first.
+- **Ops ids.** `heat.*` and `entry.add/edit/remove` name their subject with `id`; `result.set` and `entry.state` use `entry`. `entry.add` takes `{ id?, bib?, name, club?, category, heat? }` and picks the next bib above 100 when none is given. `heat.add` takes `{ id?, time, name?, category? }`. `comp.set` segments are `{ id?, name, measure? }` and categories `{ id?, name, size? }`; when the segments change every entry's results are resized.
+- **Heat rules.** `heat.start` only works on a scheduled heat, `heat.end` on a live one, `heat.reopen` on a done one. A heat cannot be removed while entries are in it.
+- **Result rules.** `result.set` in a timed race also refuses a split slower than a later one already posted. A ready entry that gets a result becomes racing; clearing a result on a finished entry puts it back to racing.
+- **Votes.** The open target is `{ kind: "heat", target, id, name, time, category, state, locksIn, choices: [{ choice, label, bib }] }`, listing everyone in the heat except dns. `tally` adds `heats: [{ target, heat, name, votes, leaders: [top 3] }]` and `leaders` for the whole event, each leader `{ choice, label, bib, category, heat, votes }`. A vote counts only while its athlete is still in that heat.
+- **Simulation.** The gap between heats is the spacing the seed has, kept between 2 and 8 minutes so a quiet spell never nears the 10 minute stall limit; a recipe `gapMins` above 8 is shown as 8 on the demo. About 2 in 100 athletes are dns and 3 in 100 drop out part-way (dnf).
+- **Recipes.** `segments` are names or `{ name, measure }`, `categories` names or `{ name, size }`, `heats` the number of heats (waves) and `perHeat` the athletes in each. Heats take the categories in turn. A timed race forces every measure to time.
 
 ## Leaderboard (public/core/fitness.js)
 

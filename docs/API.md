@@ -69,7 +69,7 @@ answer is `204` with no body, which is what polling uses. `Cache-Control: no-sto
 
 ### GET /api/events/:slug/votes
 `tally(counts, doc, now)` from `core/votes.js`: `{ open, total, now: [...targets open now],
-leaders }` for football or `{ open, total, now, rounds, fighters }` for boxing. Cached for 2
+leaders }` for football or `{ open, total, now, rounds, fighters }` for boxing, or `{ open, total, now, heats, leaders }` for fitness (see docs/FITNESS.md). Cached for 2
 seconds per event.
 
 ### POST /api/events/:slug/votes
@@ -135,16 +135,16 @@ Admin of a **demo** event only (403 otherwise): puts the demo back to its seed.
 
 Seeded by `scripts/seed.js` from `src/seeds/*.js`: `beach-soccer-cup` (football, live),
 `futsal-finals` (football, before the day), `sixes-league-night` (football, after the day) and
-`fight-night` (boxing, live). Each has published demo codes for every role. A cron trigger keeps
-the beach soccer cup and the fight night "always live": it plays games and rounds forward, adds
+`fight-night` (boxing, live), `fitness-race` (timed race, live) and `fitness-games` (workout games, live). Each has published demo codes for every role. A cron trigger keeps
+the beach soccer cup, the fight night and the two fitness demos "always live": it plays games and rounds forward, adds
 goals and fan votes, and resets them when they finish, so a prospect opening the demo at any time
 sees a live day. Every demo also resets nightly at 04:00 London time. Demo codes cannot be revoked
 (403); `POST /api/events/:slug/reset` puts a demo back.
 
 ### GET /api/demo
 `{ events: [{ slug, name, sport, phase, live, blurb, codes: [{ role, label, code }] }] }`, in the
-order beach soccer cup, futsal finals, sixes league night, fight night. Only seeded, listed demo
-events appear. `live` is true for the two simulated demos and for any demo in phase `live`. The
+order beach soccer cup, futsal finals, sixes league night, fight night, fitness race, fitness games. Only seeded, listed demo
+events appear. `live` is true for the four simulated demos and for any demo in phase `live`. The
 plain codes are public on purpose (they only open demo events).
 
 ## Additions and details beyond the contract above

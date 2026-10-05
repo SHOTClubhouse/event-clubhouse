@@ -6,7 +6,7 @@
 // strips player names down to what the event allows, hides judges' scorecards until a bout is
 // decided, and drops anything marked private.
 
-export const SPORTS = ["football", "boxing"];
+export const SPORTS = ["football", "boxing", "fitness"];
 export const PHASES = ["pre", "live", "post"];
 export const FORMATS = ["league", "groups-knockout", "knockout", "exhibition"];
 export const STATES = ["scheduled", "live", "ft"];
@@ -14,11 +14,18 @@ export const BOUT_STATES = ["scheduled", "live", "break", "done"];
 export const VOTE_BY = ["number", "name", "both"];
 // The words an event uses: where games are played and what is scored. Futsal and dodgeball play
 // on courts and score points or goals; a street series plays on a cage; boxing has a ring.
-export const PLACES = ["pitch", "court", "cage", "ring", "arena"];
+export const PLACES = ["pitch", "court", "cage", "ring", "arena", "floor"];
 export const SCORES = ["goal", "point"];
 export const OFFICIAL_ROLES = ["referee", "judge"];
 export const METHODS = ["PTS", "KO", "TKO", "RSC", "RTD", "DQ", "DRAW", "NC"];
 export const REASONS = ["style", "pressure", "defence", "power"];
+// Fitness competitions: how they are ranked, what a segment measures, who is in an entry.
+export const RANKINGS = ["time", "placings"];
+export const MEASURES = ["time", "reps", "kg"];
+export const HEAT_STATES = ["scheduled", "live", "done"];
+export const ENTRY_STATES = ["ready", "racing", "finished", "dnf", "dns"];
+export const ENTRY_SIZES = [1, 2, 4];
+export const MAX_RESULT = 100000;
 
 export const HTTPS = /^https:\/\/[^\s"'<>]+$/;
 export const SLUG = /^[a-z0-9](?:[a-z0-9-]{1,46}[a-z0-9])$/;
@@ -41,7 +48,7 @@ export const addMins = (hhmm, n) => fromMins(toMins(hhmm) + n);
 
 // ---- A blank event, filled in by the admin set-up ----
 export function blankEvent({ slug, name, sport = "football", date = null } = {}) {
-  return {
+  const blank = {
     v: 1,
     slug, name, sport, date, venue: "", timezone: "Europe/London",
     phase: "pre",
@@ -58,6 +65,8 @@ export function blankEvent({ slug, name, sport = "football", date = null } = {})
     scorecards: {},
     updates: [],
   };
+  if (sport === "fitness") blank.comp = { ranking: "time", segments: [], categories: [], heats: [], entries: [] };
+  return blank;
 }
 
 // ---- Validation: the shape every saved document must have ----
@@ -192,11 +201,83 @@ function check(doc) {
       });
     });
   });
+  if (d.sport === "fitness") errs.push(...compErrors(d.comp));
   (Array.isArray(d.updates) ? d.updates : errs.push("updates missing") && []).forEach((u) => {
     if (!ID.test(u.id || "")) errs.push(`update ${u.id}: missing id`);
     if (!text(u.title, 120) || !optText(u.body, 2000) || !optUrl(u.link)) errs.push(`update ${u.id}: title up to 120, body up to 2000, link https`);
   });
   return errs;
+}
+
+// ---- Fitness competitions (see docs/FITNESS.md) ----
+// An event being set up may have no segments, categories, heats or entries yet; the numbers are
+// the most each list may hold.
+function compErrors(c) {
+  if (!c || typeof c !== "object" || Array.isArray(c)) return ["comp missing"];
+  const e = [];
+  if (!RANKINGS.includes(c.ranking)) e.push(`comp.ranking: one of ${RANKINGS.join(", ")}`);
+  const list = (v, max, what) => (Array.isArray(v) && v.length <= max ? v : (e.push(`comp.${what}: a list of up to ${max}`), []));
+  const segs = list(c.segments, 20, "segments");
+  const cats = list(c.categories, 16, "categories");
+  const heats = list(c.heats, 120, "heats");
+  const entries = list(c.entries, 800, "entries");
+
+  const segIds = new Set();
+  segs.forEach((g) => {
+    if (!ID.test(g.id || "") || segIds.has(g.id)) e.push(`segment ${g.id}: missing or duplicate id`);
+    segIds.add(g.id);
+    if (!text(g.name, 40)) e.push(`segment ${g.id}: name 1 to 40 characters`);
+    if (!MEASURES.includes(g.measure)) e.push(`segment ${g.id}: measure one of ${MEASURES.join(", ")}`);
+    else if (c.ranking === "time" && g.measure !== "time") e.push(`segment ${g.id}: a timed race only has time segments`);
+  });
+  const catIds = new Set();
+  cats.forEach((k) => {
+    if (!ID.test(k.id || "") || catIds.has(k.id)) e.push(`category ${k.id}: missing or duplicate id`);
+    catIds.add(k.id);
+    if (!text(k.name, 40)) e.push(`category ${k.id}: name 1 to 40 characters`);
+    if (!ENTRY_SIZES.includes(k.size)) e.push(`category ${k.id}: size is ${ENTRY_SIZES.join(", ")} athletes per entry`);
+  });
+  const heatCat = Object.create(null);
+  const heatIds = new Set();
+  heats.forEach((h) => {
+    if (!ID.test(h.id || "") || heatIds.has(h.id)) e.push(`heat ${h.id}: missing or duplicate id`);
+    heatIds.add(h.id);
+    if (!TIME.test(h.time || "")) e.push(`heat ${h.id}: time must be HH:MM`);
+    if (!text(h.name, 40)) e.push(`heat ${h.id}: name 1 to 40 characters`);
+    if (h.category != null && !catIds.has(h.category)) e.push(`heat ${h.id}: unknown category ${h.category}`);
+    if (!HEAT_STATES.includes(h.state)) e.push(`heat ${h.id}: state one of ${HEAT_STATES.join(", ")}`);
+    for (const k of ["startedAt", "endedAt"]) if (h[k] != null && !(Number.isInteger(h[k]) && h[k] > 0)) e.push(`heat ${h.id}: ${k} is a time in milliseconds or empty`);
+    heatCat[h.id] = h.category ?? null;
+  });
+  const entryIds = new Set(), bibs = new Set();
+  entries.forEach((n) => {
+    const at = `entry ${n.id}`;
+    if (!ID.test(n.id || "") || entryIds.has(n.id)) e.push(`${at}: missing or duplicate id`);
+    entryIds.add(n.id);
+    if (!Number.isInteger(n.bib) || n.bib < 1 || n.bib > 99999) e.push(`${at}: bib is a whole number from 1 to 99999`);
+    else if (bibs.has(n.bib)) e.push(`${at}: bib ${n.bib} used twice`);
+    bibs.add(n.bib);
+    if (!text(n.name, 120)) e.push(`${at}: name 1 to 120 characters`);
+    if (!optText(n.club, 60)) e.push(`${at}: club 60 characters or fewer`);
+    if (!catIds.has(n.category)) e.push(`${at}: unknown category ${n.category}`);
+    if (n.heat != null) {
+      if (!heatIds.has(n.heat)) e.push(`${at}: unknown heat ${n.heat}`);
+      else if (heatCat[n.heat] != null && heatCat[n.heat] !== n.category) e.push(`${at}: heat ${n.heat} is for a different category`);
+    }
+    if (!ENTRY_STATES.includes(n.state)) e.push(`${at}: state one of ${ENTRY_STATES.join(", ")}`);
+    if (!Array.isArray(n.results) || n.results.length !== segs.length) { e.push(`${at}: needs one result (or empty) for each of the ${segs.length} segments`); return; }
+    let prev = -1;
+    n.results.forEach((v, i) => {
+      if (v == null) return;
+      if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > MAX_RESULT) e.push(`${at}: result ${i + 1} is a number from 0 to ${MAX_RESULT}`);
+      else if (segs[i].measure === "time" && !Number.isInteger(v)) e.push(`${at}: times are whole seconds`);
+      else if (c.ranking === "time") {
+        if (v < prev) e.push(`${at}: split ${i + 1} is faster than an earlier split`);
+        prev = v;
+      }
+    });
+  });
+  return e;
 }
 
 // A round under the 10-point must system: the winner of the round gets 10, the loser 6 to 9;
@@ -246,9 +327,22 @@ export function playerLabel(p, voteBy) {
   return [num, nm].filter(Boolean).join(" ");
 }
 
+// A fitness entry is one athlete or several ("Sam Smith & Alex Jones"). Fans see the bib, the
+// first names, or both: "#101", "Sam & Alex", "#101 Sam & Alex".
+export function entryLabel(entry, voteBy) {
+  const num = entry && entry.bib != null ? `#${entry.bib}` : "";
+  const nm = entry && typeof entry.name === "string" ? entry.name.split("&").map(firstName).filter(Boolean).join(" & ") : "";
+  if (voteBy === "number") return num || nm;
+  if (voteBy === "name") return nm || num;
+  return [num, nm].filter(Boolean).join(" ");
+}
+
 export function publicView(doc) {
   const d = JSON.parse(JSON.stringify(doc));
   const by = d.settings.voteBy;
+  if (d.comp && Array.isArray(d.comp.entries)) {
+    d.comp.entries = d.comp.entries.map((n) => ({ id: n.id, bib: n.bib, label: entryLabel(n, by), club: n.club || "", category: n.category, heat: n.heat ?? null, results: n.results, state: n.state }));
+  }
   d.divisions.forEach((v) => v.teams.forEach((t) => {
     t.players = (t.players || []).map((p) => ({ id: p.id, label: playerLabel(p, by), number: by === "name" ? undefined : p.number ?? undefined }));
   }));
@@ -295,7 +389,7 @@ export const consentText = (doc) => `${(doc.theme && doc.theme.partner) || doc.n
 // .diff the table's difference column. Older events have no terms and read as football.
 export function terms(doc) {
   const t = (doc && doc.settings && doc.settings.terms) || {};
-  const place = PLACES.includes(t.place) ? t.place : doc && doc.sport === "boxing" ? "ring" : "pitch";
+  const place = PLACES.includes(t.place) ? t.place : doc && doc.sport === "boxing" ? "ring" : doc && doc.sport === "fitness" ? "arena" : "pitch";
   const score = SCORES.includes(t.score) ? t.score : "goal";
   const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
   const places = place === "pitch" ? "pitches" : `${place}s`;
