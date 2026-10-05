@@ -1,0 +1,129 @@
+/* Fitness events (races and workout games): fan page (ecf-), timekeeper page (ecf-), admin (ecx-)
+   and big screen (ecvf-). Builds on app.css tokens and uses the event's accent. Mobile first.
+   Colour is never the only signal: states also have words. */
+
+/* ---- Fan: heats on the floor ---- */
+.ecf-heat { display: grid; gap: 8px; }
+.ecf-heat__top { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; }
+.ecf-heat__time { font-family: var(--display); font-size: 1.6rem; line-height: 1; color: var(--accent); }
+.ecf-heat__name { display: grid; min-width: 0; font-size: 1.05rem; }
+.ecf-heat__name b { overflow-wrap: anywhere; }
+.ecf-heat__name small { color: var(--ece-dim); font-weight: 600; font-size: 0.8rem; }
+.ecf-heat__top .ece-tag { justify-self: start; grid-column: 2 / -1; }
+.ecf-heat__sum { margin: 0; }
+.ecf-heat.is-mine { border-color: var(--accent); }
+.ecf-progs, .ecf-names, .ecf-segs, .ecf-lb { list-style: none; margin: 0; padding: 0; }
+.ecf-progs { display: grid; gap: 8px; }
+.ecf-prog { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: var(--r-sm); }
+.ecf-prog.is-mine { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel-2)); }
+.ecf-who { display: grid; min-width: 0; }
+.ecf-who b { overflow-wrap: anywhere; }
+.ecf-who small { color: var(--ece-dim); font-weight: 600; font-size: 0.78rem; overflow-wrap: anywhere; }
+.ecf-state { justify-self: end; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); font-size: 0.7rem; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; }
+.ecf-state--fin { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.ecf-state--dnf { color: #ff9a9a; border-color: rgba(255, 138, 138, 0.5); }
+.ecf-state--dns, .ecf-state--rdy { color: var(--muted); }
+.ecf-line { grid-column: 1 / -1; color: var(--muted); font-size: 0.86rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ecf-bar { grid-column: 1 / -1; display: block; height: 8px; border-radius: 99px; background: var(--panel-3); overflow: hidden; }
+.ecf-bar i { display: block; height: 100%; width: var(--w); background: var(--accent); border-radius: 99px; transition: width 0.6s ease; }
+.ecf-prog--dnf .ecf-bar i, .ecf-prog--dns .ecf-bar i { background: var(--dim); }
+.ecf-prog .ece-tag { justify-self: start; }
+
+.ecf-cats { margin-bottom: 4px; }
+.ecf-toggle { min-height: 44px; padding: 0 4px; background: none; border: 0; color: var(--accent); font-weight: 800; font-size: 0.9rem; text-align: left; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; justify-self: start; }
+.ecf-names { display: grid; gap: 6px; }
+.ecf-names li { padding: 6px 10px; border-radius: 8px; background: var(--panel-2); }
+.ecf-names li.is-mine { outline: 1px solid var(--accent); }
+
+/* ---- Fan: leaderboard, splits and scores ---- */
+.ecf-lb { display: grid; gap: 8px; margin-top: 8px; }
+.ecf-lb__item { background: var(--ece-card); border: 1px solid var(--line-soft); border-radius: var(--r); overflow: hidden; }
+.ecf-lb__item.is-top { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.ecf-lb__item.is-mine { border-color: var(--accent); box-shadow: inset 4px 0 0 var(--accent); }
+.ecf-lb__row { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; min-height: 56px; padding: 8px 12px; background: none; border: 0; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.ecf-lb__row:hover { background: var(--panel-2); }
+.ecf-lb__rank { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--panel-3); font-family: var(--display); font-size: 1.1rem; }
+.ecf-lb__item.is-top .ecf-lb__rank { background: var(--accent); color: var(--on-accent); }
+.ecf-lb__who { display: grid; min-width: 0; }
+.ecf-lb__who b { overflow-wrap: anywhere; }
+.ecf-lb__who small, .ecf-lb__val small { color: var(--ece-dim); font-weight: 600; font-size: 0.76rem; }
+.ecf-lb__val { display: grid; justify-items: end; text-align: right; font-variant-numeric: tabular-nums; }
+.ecf-lb__val b { font-family: var(--display); font-weight: 400; font-size: 1.3rem; line-height: 1.1; }
+.ecf-lb__more { padding: 4px 12px 12px; border-top: 1px solid var(--line-soft); }
+.ecf-segs { display: grid; gap: 0; margin-top: 8px; }
+.ecf-segs li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 40px; padding: 6px 0; border-bottom: 1px solid var(--line-soft); }
+.ecf-segs li:last-child { border-bottom: 0; }
+.ecf-seg__n { color: var(--ece-dim); font-size: 0.8rem; font-weight: 800; text-align: center; }
+.ecf-seg__name { overflow-wrap: anywhere; font-weight: 700; }
+.ecf-seg__v { display: grid; justify-items: end; text-align: right; font-variant-numeric: tabular-nums; }
+.ecf-seg__v small { color: var(--ece-dim); font-size: 0.74rem; font-weight: 600; }
+.ecf-none { color: var(--ece-dim); font-size: 0.85rem; }
+
+/* ---- Fan: find me ---- */
+.ecf-find { display: grid; gap: 12px; margin-top: 0; }
+.ecf-find .ece-h3 { margin-top: 0; }
+.ecf-me { border-color: var(--accent); }
+.ecf-facts { display: grid; gap: 8px; margin: 10px 0 6px; }
+.ecf-facts div { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.ecf-facts dt { color: var(--ece-dim); font-size: 0.72rem; font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase; }
+.ecf-facts dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
+.ecf-forget { margin-top: 14px; }
+
+/* ---- Timekeeper ---- */
+.ecf-search { margin-bottom: 2px; }
+.ecf-back { justify-self: start; }
+.ecf-hcard { display: grid; gap: 10px; }
+.ecf-confirm { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--gold); border-radius: var(--r-sm); background: #1d1704; }
+.ecf-confirm p { margin: 0; }
+.ecf-ath__head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.ecf-bib { display: grid; place-items: center; min-width: 56px; height: 48px; padding: 0 8px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-family: var(--display); font-weight: 400; font-size: 1.7rem; line-height: 1; }
+.ecf-ath__name { display: grid; min-width: 0; }
+.ecf-ath__name b { font-size: 1.05rem; overflow-wrap: anywhere; }
+.ecf-ath__name small { color: var(--muted); font-size: 0.8rem; }
+article.ecf-ath { display: grid; gap: 10px; padding: 12px; }
+article.ecf-ath--finished { opacity: 0.92; }
+article.ecf-ath--dnf, article.ecf-ath--dns { border-color: rgba(255, 255, 255, 0.2); }
+.ecf-form { display: grid; gap: 10px; }
+.ecf-in { min-height: 56px; font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+.ecf-form .ec-btn { min-height: 56px; }
+.ecf-tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.ecf-tools .ec-btn { min-height: 48px; }
+
+/* ---- Admin ---- */
+.ecx-heatmeta { display: grid; gap: 4px; justify-items: start; }
+.ecx-athlete > .ec-field { flex: 1 1 8rem; }
+.ecx-athlete > .ec-field:first-child { flex: 0 1 6rem; }
+.ecx-errors { margin: 0; padding: 10px 14px 10px 30px; border: 1px solid var(--red); border-radius: var(--r-sm); background: #200c0c; color: #ffb3b3; display: grid; gap: 4px; }
+
+/* ---- Big screen ---- */
+.ecvf-live { display: grid; grid-template-columns: repeat(var(--c, 1), minmax(0, 1fr)); gap: 2.4vw; align-items: start; }
+.ecvf-live .ecv-h small { font-family: var(--body); font-size: 0.45em; color: var(--muted); letter-spacing: 0.08em; }
+.ecvf-aths { list-style: none; margin: 0; padding: 0; display: grid; gap: calc(0.9vh * var(--f)); }
+.ecvf-ath { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: calc(0.3vh * var(--f)) 1vw; align-items: baseline; background: var(--panel); border: 1px solid var(--line-soft); border-radius: 1.2vh; padding: calc(1vh * var(--f)) 1vw; }
+.ecvf-ath.is-fin { border-color: var(--accent); }
+.ecvf-ath.is-out { opacity: 0.6; }
+.ecvf-ath__who { display: grid; min-width: 0; }
+.ecvf-ath__who b { font-family: var(--display); font-weight: 400; font-size: calc(3.2vh * var(--f)); text-transform: uppercase; line-height: 1.05; overflow-wrap: anywhere; }
+.ecvf-ath__who small { color: var(--muted); font-size: calc(1.8vh * var(--f)); font-weight: 700; min-height: 1em; }
+.ecvf-ath__t { font-family: var(--display); font-size: calc(3.2vh * var(--f)); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ecvf-ath.is-fin .ecvf-ath__t { color: var(--accent); }
+.ecvf-bar { grid-column: 1 / -1; display: block; height: calc(0.9vh * var(--f)); border-radius: 99px; background: var(--panel-3); overflow: hidden; }
+.ecvf-bar i { display: block; height: 100%; width: var(--w); background: var(--accent); border-radius: 99px; transition: width 0.8s ease; }
+.ecvf-lb .w small { display: block; }
+.ecvf-lb { max-width: 100%; }
+.ecvf-next { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: calc(1.6vh * var(--f)) 2.4vw; }
+.ecvf-wave { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1.6vw; align-items: center; background: var(--panel); border: 1px solid var(--line-soft); border-radius: 1.6vh; padding: calc(1.6vh * var(--f)) 1.6vw; }
+.ecvf-wave__t { font-family: var(--display); font-size: calc(8vh * var(--f)); line-height: 1; color: var(--accent); }
+.ecvf-wave__w { display: grid; min-width: 0; }
+.ecvf-wave__w b { font-family: var(--display); font-weight: 400; font-size: calc(4.4vh * var(--f)); text-transform: uppercase; line-height: 1.05; overflow-wrap: anywhere; }
+.ecvf-wave__w small { color: var(--muted); font-size: calc(2.4vh * var(--f)); font-weight: 700; }
+
+/* The Finisher moment: a banner, not a takeover */
+.ecvf-fin { position: fixed; left: 50%; bottom: 17vh; z-index: 25; transform: translateX(-50%); min-width: 34vw; max-width: 80vw; padding: 2vh 3vw; text-align: center; background: rgba(10, 12, 14, 0.96); border: 0.4vh solid var(--accent); border-radius: 2vh; animation: ecv-in 0.4s ease-out; }
+.ecvf-fin p { margin: 0; font-family: var(--display); text-transform: uppercase; font-size: 3.4vh; letter-spacing: 0.12em; color: var(--accent); }
+.ecvf-fin h2 { margin: 0.4vh 0; font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: 8vh; line-height: 1; overflow-wrap: anywhere; }
+.ecvf-fin div { font-family: var(--display); font-size: 5vh; color: var(--text); font-variant-numeric: tabular-nums; }
+
+@media (min-width: 560px) {
+  .ecf-facts div { grid-template-columns: 110px minmax(0, 1fr); }
+}

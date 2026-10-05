@@ -4,7 +4,7 @@
 import { api, sessionsFor, signIn, signOut, organiser, organiserSignIn, organiserSignOut, organiserOpen } from "./api.js";
 import { h, field, input, select, btn, msgBox, showMsg, withBusy, copyText, confirmBox, skeleton, fmtDate, plural } from "./admin-lib.js";
 
-const SPORT = { football: "Football", boxing: "Boxing" };
+const SPORT = { football: "Football", boxing: "Boxing", fitness: "Fitness" };
 const PHASE = { pre: "Before", live: "Live now", post: "After" };
 const open = (slug) => { location.href = `/admin/?e=${encodeURIComponent(slug)}`; };
 
@@ -126,7 +126,7 @@ export function renderSignIn(root, opts = {}) {
   function createForm() {
     const msg = msgBox();
     const name = input({ maxlength: "80", placeholder: "Summer Sixes Cup", "aria-required": "true", value: draft.name });
-    const sport = select([["football", "Football (any variant)"], ["boxing", "Boxing"]], draft.sport);
+    const sport = select([["football", "Football (any variant)"], ["boxing", "Boxing"], ["fitness", "Fitness (races and workout games)"]], draft.sport);
     const date = input({ type: "date", value: draft.date });
     name.addEventListener("input", () => { draft.name = name.value; });
     sport.addEventListener("change", () => { draft.sport = sport.value; });

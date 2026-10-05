@@ -4,6 +4,7 @@
 import { esc, side, pitchName, plural } from "/js/ui.js";
 import { tables, champion, winnerOf } from "/core/standings.js";
 import { currentBout, resultText, decision } from "/core/boxing.js";
+import { fitTabs, fitView, fitWrapParts } from "/js/fit-fan.js";
 
 // ---- Small helpers ----
 export const fmtDate = (d) => (d ? new Date(`${d}T12:00:00`).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "");
@@ -26,6 +27,7 @@ const empty = (title, body = "") => `<div class="ece-empty"><b>${esc(title)}</b>
 
 // ---- Which sections apply ----
 export function tabsFor(ev, votes) {
+  if (ev.sport === "fitness") return fitTabs(ev, votes);
   const f = isFootball(ev);
   const voteShown = ev.phase === "live" && (ev.settings.vote.open || (votes && votes.total > 0));
   const t = [];
@@ -318,8 +320,9 @@ export function leaderboard(S, o = {}) {
 
 // ---- Post: the day ----
 export function wrapView(S) {
-  const ev = S.event, f = isFootball(ev), out = [];
-  if (f) {
+  const ev = S.event, f = isFootball(ev), fit = ev.sport === "fitness", out = [];
+  if (fit) out.push(...fitWrapParts(S));
+  else if (f) {
     ev.divisions.forEach((d) => {
       const c = champion(d, ev.fixtures, ev.settings.points);
       const t = c && c.id ? d.teams.find((x) => x.id === c.id) : null;
@@ -330,7 +333,7 @@ export function wrapView(S) {
     if (done) out.push(`<section class="ece-champ" aria-label="Main event"><p class="ec-kicker">${esc(done.title || "Main event")}</p><p class="ece-champ__n">${esc(done.result.winner ? done[done.result.winner].name : cap(done.result.method === "DRAW" ? "Draw" : "No contest"))}</p><p>${esc(resultText(done))}</p></section>`);
   }
   if (!out.length) out.push(`<section class="ece-champ ece-champ--soft"><p class="ec-kicker">That's a wrap</p><p class="ece-champ__n">Thanks for being there</p><p>${esc(ev.name)} is done. Results and updates are below.</p></section>`);
-  out.push(leaderboard(S, { limit: 5 }));
+  if (!fit) out.push(leaderboard(S, { limit: 5 }));
   const ups = [...(ev.updates || [])].sort((a, b) => (b.at || 0) - (a.at || 0));
   out.push(`<section class="ece-sec" aria-labelledby="h-up"><h2 id="h-up" class="ece-h">Updates from the organiser</h2>${ups.length ? `<ol class="ece-feed">${ups.map((u) => `<li class="ece-card"><time datetime="${u.at ? new Date(u.at).toISOString() : ""}">${u.at ? esc(new Date(u.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })) : ""}</time><h3>${esc(u.title)}</h3>${u.body ? `<p>${esc(u.body)}</p>` : ""}${u.link ? `<a href="${esc(u.link)}" target="_blank" rel="noopener">Read more</a>` : ""}</li>`).join("")}</ol>` : empty("No updates yet", "The organiser's news and content will appear here.")}</section>`);
   if (ev.links && ev.links.clubhouse) out.push(`<section class="ece-card ece-cta"><p class="ec-kicker">After the day</p><h2 class="ece-h">Stay in the clubhouse</h2><p class="ece-lede">Results, updates and the next event, in one place.</p><a class="ec-btn ec-btn--big ec-btn--block" href="${esc(ev.links.clubhouse)}" target="_blank" rel="noopener">Join the Clubhouse</a></section>`);
@@ -344,6 +347,7 @@ export function skeleton() {
 
 export function viewFor(tab, S) {
   const ev = S.event;
+  if (ev.sport === "fitness" && tab !== "home" && tab !== "wrap") return fitView(tab, S);
   switch (tab) {
     case "home": return homeView(S);
     case "teams": return teamsView(S);

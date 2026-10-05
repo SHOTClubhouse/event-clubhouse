@@ -6,6 +6,7 @@ import { applyTheme, toast, esc, startVideos, streamHtml, side } from "/js/ui.js
 import { streamInfo } from "/core/model.js";
 import { resultText } from "/core/boxing.js";
 import { headerHtml, tabsFor, defaultTab, viewFor, skeleton } from "/js/event-views.js";
+import { fitClick, fitInput, fitSubmit, fitChanges } from "/js/fit-fan.js";
 import { voteView, over13, setOver13, loadMine, saveMine, loadFollow, saveFollow, loadReg, saveReg, lockText } from "/js/event-vote.js";
 
 const slug = (location.pathname.match(/^\/e\/([^/]+)/) || [])[1] || "";
@@ -187,6 +188,7 @@ function announce(msg) {
   announceTimer = setTimeout(() => { el.textContent = msg; }, 60);
 }
 function changes(oldEv, ev) {
+  if (ev.sport === "fitness") return fitChanges(oldEv, ev);
   const msgs = [], flash = [];
   const o = new Map(oldEv.fixtures.map((f) => [f.id, f]));
   ev.fixtures.forEach((f) => {
@@ -231,6 +233,7 @@ function go(tab) { if (location.hash.slice(1) === tab) render(); else location.h
 document.addEventListener("click", async (e) => {
   const t = e.target.closest("button, a");
   if (!t) return;
+  if (t.dataset.fit) { if (fitClick(t)) render(); return; }
   if (t.dataset.vote) {
     const target = t.dataset.target, mine = S.mine[target];
     const isRound = target.startsWith("r:");
@@ -254,7 +257,10 @@ document.addEventListener("change", (e) => {
   else if ("fdiv" in t.dataset) { S.filters.div = t.value; render(); }
   else if ("mine" in t.dataset) { S.filters.mineOnly = t.checked; render(); }
 });
+document.addEventListener("input", (e) => fitInput(e.target));
 document.addEventListener("submit", (e) => {
+  const ff = e.target.closest("form[data-fit-form]");
+  if (ff) { e.preventDefault(); const m = fitSubmit(ff, S); render(); if (m) announce(m); return; }
   const f = e.target.closest("form[data-reg]");
   if (!f) return;
   e.preventDefault();

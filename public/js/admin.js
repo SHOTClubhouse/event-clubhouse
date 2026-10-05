@@ -17,12 +17,13 @@ import { card } from "./admin-card.js";
 import { codes } from "./admin-codes.js";
 import { live } from "./admin-live.js";
 import { after } from "./admin-after.js";
+import { fitnessTabs } from "./admin-fitness.js";
 
 const app = document.getElementById("app");
 const slug = new URLSearchParams(location.search).get("e");
 const PHASE = { pre: "Before", live: "Live", post: "After" };
 
-const tabsFor = (sport, ev) => (sport === "boxing"
+const tabsFor = (sport, ev) => (sport === "fitness" ? fitnessTabs(ev) : sport === "boxing"
   ? [["overview", "Overview", overview], ["details", "Details", details], ["card", "Fight card", card], ["officials", "Judges and referees", officials], ["codes", "Access codes", codes], ["live", "Live control", live], ["after", "After", after]]
   : [["overview", "Overview", overview], ["details", "Details", details], ["teams", "Teams", teams], ["officials", `${terms(ev).Places} and officials`, officials], ["fixtures", "Fixtures", fixtures], ["codes", "Access codes", codes], ["live", "Live control", live], ["after", "After", after]]);
 

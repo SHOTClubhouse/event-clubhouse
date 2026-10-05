@@ -60,6 +60,7 @@
 .ecs-panel p { margin-bottom: 14px; }
 .ecs-panel.is-football { border-top: 5px solid var(--teal); }
 .ecs-panel.is-boxing { border-top: 5px solid var(--gold); }
+.ecs-panel.is-fitness { border-top: 5px solid var(--teal); grid-column: 1 / -1; }
 .ecs-panel .ecs-card-tag { display: block; margin-bottom: 10px; }
 .ecs-ring { width: 100%; max-width: 220px; margin: 6px 0 18px; opacity: 0.9; }
 

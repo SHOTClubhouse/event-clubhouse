@@ -4,14 +4,14 @@ import { terms } from "../core/model.js";
 import { h, field, input, textarea, select, btn, msgBox, showMsg, withBusy, plainError, confirmBox, parseLines, plural, empty } from "./admin-lib.js";
 
 export function officials(ctx) {
-  const ev = ctx.event, football = ev.sport === "football", T = terms(ev);
+  const ev = ctx.event, football = ev.sport === "football", fit = ev.sport === "fitness", T = terms(ev);
   const refs = ev.officials.filter((o) => o.role === "referee");
   const judges = ev.officials.filter((o) => o.role === "judge");
   return h("div", { class: "ecx-stack" },
-    h("p", { class: "ec-lede", text: football ? `${T.Places} are where games are played. Add a referee for each ${T.place}, then give each one a code in Access codes.` : "Add the referees who run the bouts and the judges who score them. Give each one a code in Access codes." }),
+    h("p", { class: "ec-lede", text: football ? `${T.Places} are where games are played. Add a referee for each ${T.place}, then give each one a code in Access codes.` : fit ? "Add the timekeepers who post splits and scores from their phones. Then give each one a code in Access codes." : "Add the referees who run the bouts and the judges who score them. Give each one a code in Access codes." }),
     football ? pitchesCard(ctx) : null,
-    officialsCard(ctx, { role: "referee", title: football ? "Referees" : "Referees and timekeepers", list: refs, pitches: football, noun: "referee" }),
-    football ? null : officialsCard(ctx, { role: "judge", title: "Judges", list: judges, pitches: false, noun: "judge" }));
+    officialsCard(ctx, { role: "referee", title: football ? "Referees" : fit ? "Timekeepers" : "Referees and timekeepers", list: refs, pitches: football, noun: fit ? "timekeeper" : "referee" }),
+    ev.sport !== "boxing" ? null : officialsCard(ctx, { role: "judge", title: "Judges", list: judges, pitches: false, noun: "judge" }));
 }
 
 function pitchesCard(ctx) {

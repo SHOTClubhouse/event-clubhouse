@@ -4,6 +4,8 @@
 import { champion } from "../core/standings.js";
 import { terms } from "../core/model.js";
 import { resultText } from "../core/boxing.js";
+import { leaderboard } from "../core/fitness.js";
+import { comp, isRace, fmtTime } from "./fit-lib.js";
 import { h, field, input, textarea, btn, msgBox, showMsg, withBusy, plainError, confirmBox, fmtDateTime, plural, empty, skeleton } from "./admin-lib.js";
 
 const reg = { state: "idle", count: 0, rows: [], error: "" };     // registrations
@@ -36,10 +38,20 @@ async function loadVotes(ctx) {
 
 // ---- Results ----
 function results(ctx) {
-  const ev = ctx.event, football = ev.sport === "football";
+  const ev = ctx.event, football = ev.sport === "football", fit = ev.sport === "fitness";
   const refresh = btn("Refresh", () => { votes.state = "idle"; reg.state = "idle"; ctx.render(); }, { cls: "ec-btn--ghost ec-btn--sm", key: "res-refresh", label: "Refresh results and votes" });
   let main;
-  if (football) {
+  if (fit) {
+    const c = comp(ev), done = c.heats.filter((x) => x.state === "done").length;
+    main = h("div", { class: "ecx-stack" },
+      h("p", { class: "ec-muted", text: `${done} of ${plural(c.heats.length, "heat")} finished.` }),
+      c.categories.length ? h("ul", { class: "ecx-list", "aria-label": "Winners" }, c.categories.map((k) => {
+        const w = leaderboard(ev, k.id).find((r) => r.rank === 1);
+        return h("li", { class: "ecx-list__row" }, h("div", { class: "ecx-grow" }, h("p", { class: "ec-caps ec-dim", text: k.name }),
+          w ? h("p", { class: "ecx-champ", text: w.label }) : h("p", { class: "ec-muted", text: "No winner yet." }),
+          w ? h("p", { class: "ec-small ec-muted", text: isRace(ev) ? `Finish time ${fmtTime(w.total)}` : `${w.points} ${w.points === 1 ? "point" : "points"}` }) : null));
+      })) : empty("No categories."));
+  } else if (football) {
     const played = ev.fixtures.filter((f) => f.state === "ft").length;
     const goals = ev.fixtures.reduce((n, f) => n + (f.state !== "scheduled" && f.homeScore != null ? f.homeScore + f.awayScore : 0), 0);
     main = h("div", { class: "ecx-stack" },
@@ -58,14 +70,14 @@ function results(ctx) {
   }
   let leaders;
   if (votes.state === "ok" && votes.data) {
-    const rows = football ? (votes.data.leaders || []).slice(0, 5).map((l) => ({ name: `${l.label} (${l.team})`, n: l.votes })) : (votes.data.fighters || []).slice(0, 5).map((l) => ({ name: l.name, n: l.votes }));
-    leaders = rows.length ? h("ol", { class: "ecx-leaders", "aria-label": football ? "Fan vote leaders" : "Fans' fighter of the night" }, rows.map((r) => h("li", {}, h("span", { text: r.name }), h("strong", { text: plural(r.n, "vote") })))) : empty("No fan votes yet.");
+    const rows = fit ? (votes.data.leaders || []).slice(0, 5).map((l) => ({ name: l.label, n: l.votes })) : football ? (votes.data.leaders || []).slice(0, 5).map((l) => ({ name: `${l.label} (${l.team})`, n: l.votes })) : (votes.data.fighters || []).slice(0, 5).map((l) => ({ name: l.name, n: l.votes }));
+    leaders = rows.length ? h("ol", { class: "ecx-leaders", "aria-label": football || fit ? "Fan vote leaders" : "Fans' fighter of the night" }, rows.map((r) => h("li", {}, h("span", { text: r.name }), h("strong", { text: plural(r.n, "vote") })))) : empty("No fan votes yet.");
   } else if (votes.state === "error") leaders = h("p", { class: "ec-error", role: "alert", text: votes.error });
   else leaders = skeleton(3);
   return h("section", { class: "ec-card ecx-stack", "aria-labelledby": "h-results" },
     h("div", { class: "ecx-split" }, h("h3", { class: "ec-d3 ecx-grow", id: "h-results", text: "Results" }), refresh),
     main,
-    h("h4", { class: "ecx-h4", text: football ? "Fan vote leaders (player of the game)" : "Fans' fighter of the night" }),
+    h("h4", { class: "ecx-h4", text: fit ? "Fan favourites" : football ? "Fan vote leaders (player of the game)" : "Fans' fighter of the night" }),
     leaders);
 }
 

@@ -12,7 +12,7 @@ function onAccent(hex) {
 }
 
 export function details(ctx) {
-  const ev = ctx.event, football = ev.sport === "football";
+  const ev = ctx.event, football = ev.sport === "football", fit = ev.sport === "fitness";
   const msg = msgBox();
   const dirty = () => { ctx.dirty = true; };
 
@@ -31,7 +31,7 @@ export function details(ctx) {
   const tickets = input({ type: "url", value: ev.links.tickets || "", placeholder: "https://tickets.example.com/your-event", inputmode: "url" });
   const clubhouse = input({ type: "url", value: ev.links.clubhouse || "", inputmode: "url" });
 
-  const voteBy = select([["number", "Shirt number only (safest)"], ["name", "First name only"], ["both", "Shirt number and first name"]], ev.settings.voteBy);
+  const voteBy = select([["number", fit ? "Bib number only (safest)" : "Shirt number only (safest)"], ["name", "First name only"], ["both", fit ? "Bib number and first name" : "Shirt number and first name"]], ev.settings.voteBy);
   const lock = input({ type: "number", min: "0", max: "600", inputmode: "numeric", value: String(ev.settings.lockSecs) });
   const win = input({ type: "number", min: "0", max: "10", inputmode: "numeric", value: String(ev.settings.points.win) });
   const draw = input({ type: "number", min: "0", max: "10", inputmode: "numeric", value: String(ev.settings.points.draw) });
@@ -39,9 +39,9 @@ export function details(ctx) {
   const cards = select([["after", "After the bout is decided"], ["live", "As each round is scored"], ["never", "Never"]], ev.settings.showCards || "after");
 
   const tm = terms(ev);
-  const place = select([["pitch", "Pitch"], ["court", "Court"], ["cage", "Cage"], ["ring", "Ring"], ["arena", "Arena"]], tm.place);
+  const place = select(fit ? [["arena", "Arena"], ["floor", "Floor"]] : [["pitch", "Pitch"], ["court", "Court"], ["cage", "Cage"], ["ring", "Ring"], ["arena", "Arena"]], tm.place);
   const scored = select([["goal", "Goals"], ["point", "Points"]], tm.score);
-  const discipline = input({ value: tm.discipline, maxlength: "30", placeholder: football ? "Futsal" : "White-collar boxing" });
+  const discipline = input({ value: tm.discipline, maxlength: "30", placeholder: football ? "Futsal" : fit ? "Fitness race" : "White-collar boxing" });
 
   // Live preview of the event's look
   const preview = h("div", { class: "ecx-preview", role: "img", "aria-label": "Preview of how the event looks to fans" });
@@ -73,8 +73,8 @@ export function details(ctx) {
       theme: { accent: val(accentHex), logo: val(logo) || null, partner: val(partner) || null },
       links: { tickets: val(tickets) || null, clubhouse: val(clubhouse) || null },
     }, {
-      op: "settings.set", lockSecs: Number(lock.value), ...(football ? { voteBy: voteBy.value, points: { win: Number(win.value), draw: Number(draw.value), loss: Number(loss.value) } } : { showCards: cards.value }),
-      terms: { ...(football ? { place: place.value, score: scored.value } : {}), discipline: val(discipline) },
+      op: "settings.set", lockSecs: Number(lock.value), ...(football ? { voteBy: voteBy.value, points: { win: Number(win.value), draw: Number(draw.value), loss: Number(loss.value) } } : fit ? { voteBy: voteBy.value } : { showCards: cards.value }),
+      terms: { ...(football ? { place: place.value, score: scored.value } : fit ? { place: place.value } : {}), discipline: val(discipline) },
     }];
     if (lock.value === "") { showMsg(msg, "Vote lock: type a number of seconds from 0 to 600."); lock.focus(); return; }
     const go = e.submitter || form.querySelector("button[type=submit]");
@@ -105,17 +105,17 @@ export function details(ctx) {
     h("section", { class: "ec-card ecx-stack", "aria-labelledby": "h-rules" },
       h("h3", { class: "ec-d3", id: "h-rules", text: "Rules of the day" }),
       h("div", { class: "ecx-fields" },
-        football ? field("Players shown to fans", voteBy, "Full names never leave the server. Fans see what you pick here.") : null,
-        field("Vote lock (seconds)", lock, football ? "How long fans can still vote after full time." : "How long fans can still vote after a round ends."),
+        football || fit ? field(fit ? "Athletes shown to fans" : "Players shown to fans", voteBy, "Full names never leave the server. Fans see what you pick here.") : null,
+        field("Vote lock (seconds)", lock, football ? "How long fans can still vote after full time." : fit ? "How long fans can still vote after a heat ends." : "How long fans can still vote after a round ends."),
         football ? field("Points for a win", win) : null,
         football ? field("Points for a draw", draw) : null,
         football ? field("Points for a loss", loss) : null,
-        football ? null : field("Judges' cards show", cards, "Keep cards private until each bout is decided, or show them as rounds are scored."))),
+        football || fit ? null : field("Judges' cards show", cards, "Keep cards private until each bout is decided, or show them as rounds are scored."))),
 
     h("section", { class: "ec-card ecx-stack", "aria-labelledby": "h-words" },
       h("h3", { class: "ec-d3", id: "h-words", text: "Words" }),
       h("div", { class: "ecx-fields" },
-        football ? field("Games are played on a", place, "Fans, referees and the big screen use this word.") : null,
+        football || fit ? field(fit ? "Heats are on the" : "Games are played on a", place, "Fans, timekeepers and the big screen use this word.") : null,
         football ? field("Games are scored in", scored, "Goals or points, in scores and tables.") : null,
         field("Sport shown to fans (optional)", discipline, "Up to 30 characters. Shows by the date on the fan page."))),
 

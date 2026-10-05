@@ -50,7 +50,7 @@ function issueForm(ctx, { teams, refs, judges }) {
   const ev = ctx.event;
   const roles = [["admin", "Admin (the organiser's team)"]];
   if (ev.sport === "football") roles.push(["referee", "Referee"], ["coach", "Coach or team manager"]);
-  else roles.push(["referee", "Referee or timekeeper"], ["judge", "Judge"]);
+  else roles.push(["referee", "Referee or timekeeper"], ...(ev.sport === "boxing" ? [["judge", "Judge"]] : []));
   const role = select(roles, "referee", { key: "code-role" });
   const subject = select([["", ""]], "");
   const label = input({ maxlength: "60", placeholder: "Shows in the codes list" });
@@ -71,7 +71,7 @@ function issueForm(ctx, { teams, refs, judges }) {
     subjectWrap.hidden = false;
     const nm = role.value === "coach" ? "team" : role.value;
     if (!list.length) {
-      subjectWrap.append(h("p", { class: "ec-small ec-muted", text: role.value === "coach" ? "Add teams first (Teams)." : `Add a ${nm} first (${terms(ev).Places} and officials).` }));
+      subjectWrap.append(h("p", { class: "ec-small ec-muted", text: role.value === "coach" ? "Add teams first (Teams)." : ev.sport === "fitness" ? "Add a timekeeper first (Timekeepers)." : `Add a ${nm} first (${terms(ev).Places} and officials).` }));
       subject.replaceChildren(); subject.value = "";
     } else {
       subject.replaceChildren(...list.map((x) => h("option", { value: x.id, text: x.name })));
