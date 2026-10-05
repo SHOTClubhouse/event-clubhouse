@@ -9,7 +9,7 @@
 // rejected so a half-applied save never reaches fans. The resulting document must pass
 // validate().
 
-import { validate, newId, ID, STATES, PHASES, VOTE_BY, METHODS, mustScore } from "./model.js";
+import { validate, newId, ID, STATES, PHASES, VOTE_BY, METHODS, mustScore, RANKINGS, ENTRY_STATES, MAX_RESULT } from "./model.js";
 import { nextState, decision, cardsComplete } from "./boxing.js";
 
 const ADMIN = ["admin"];
@@ -21,7 +21,81 @@ const division = (d, id) => d.divisions.find((v) => v.id === id);
 const pick = (src, keys) => Object.fromEntries(keys.filter((k) => src[k] !== undefined).map((k) => [k, src[k]]));
 const allIds = (d) => [...d.fixtures.map((f) => f.id), ...d.divisions.flatMap((v) => v.teams.map((t) => t.id)), ...d.pitches.map((p) => p.id), ...d.officials.map((o) => o.id), ...(d.card.bouts || []).map((b) => b.id)];
 
+// ---- Fitness helpers ----
+const heatOf = (d, id) => ((d.comp || {}).heats || []).find((h) => h.id === id);
+const entryOf = (d, id) => ((d.comp || {}).entries || []).find((n) => n.id === id);
+const allDone = (n) => n.results.length > 0 && n.results.every((v) => v != null);
+const anyResult = (d) => d.comp.entries.some((n) => n.results.some((v) => v != null));
+const fitnessIds = (d) => [...d.comp.heats.map((h) => h.id), ...d.comp.entries.map((n) => n.id), ...d.comp.segments.map((g) => g.id), ...d.comp.categories.map((k) => k.id)];
+const notFitness = "This isn't a fitness event.";
+// Fields copied from what a person sent, never the whole object, so nothing unexpected is saved.
+// ids and bibs already used are passed in, and the new ones are added, so a bulk import never repeats one.
+const newEntry = (d, o, ids, bibs) => {
+  const id = o.id || newId("A", ids);
+  const bib = o.bib ?? Math.max(100, ...bibs) + 1;
+  ids.push(id); bibs.push(bib);
+  return {
+    id, bib,
+    name: typeof o.name === "string" ? o.name.trim() : o.name,
+    club: typeof o.club === "string" ? o.club.trim() : "",
+    category: o.category,
+    heat: o.heat ?? null,
+    results: Array.from({ length: d.comp.segments.length }, () => null),
+    state: "ready",
+  };
+};
+const fieldsOf = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, typeof o[k] === "string" ? o[k].trim() : o[k]]));
+
 export const OPS = {
+  // ---- On the day: fitness ----
+  "heat.start": { roles: OFFICIAL, run(d, o, a, now) {
+    if (!d.comp) return notFitness;
+    const h = heatOf(d, o.id); if (!h) return "Heat not found.";
+    if (h.state === "live") return "This heat has already started.";
+    if (h.state === "done") return "This heat is finished. Ask the organiser to reopen it.";
+    h.state = "live"; h.startedAt = now; h.endedAt = null;
+    d.comp.entries.forEach((n) => { if (n.heat === h.id && n.state === "ready") n.state = "racing"; });
+  } },
+  "heat.end": { roles: OFFICIAL, run(d, o, a, now) {
+    if (!d.comp) return notFitness;
+    const h = heatOf(d, o.id); if (!h) return "Heat not found.";
+    if (h.state === "scheduled") return "Start the heat first.";
+    if (h.state === "done") return "This heat has already finished.";
+    h.state = "done"; h.endedAt = now;
+    d.comp.entries.forEach((n) => { if (n.heat === h.id && n.state === "racing") n.state = allDone(n) ? "finished" : "dnf"; });
+  } },
+  "heat.reopen": { roles: ADMIN, run(d, o) {
+    if (!d.comp) return notFitness;
+    const h = heatOf(d, o.id); if (!h) return "Heat not found.";
+    if (h.state !== "done") return "Only a finished heat can be reopened.";
+    h.state = "live"; h.endedAt = null;
+  } },
+  "result.set": { roles: OFFICIAL, run(d, o) {
+    if (!d.comp) return notFitness;
+    const n = entryOf(d, o.entry); if (!n) return "Athlete not found.";
+    const seg = d.comp.segments[o.segment];
+    if (!Number.isInteger(o.segment) || !seg) return "Unknown segment.";
+    const v = o.value;
+    if (v !== null) {
+      if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > MAX_RESULT) return `Enter a number from 0 to ${MAX_RESULT}.`;
+      if (seg.measure === "time" && !Number.isInteger(v)) return "Enter the time in whole seconds.";
+      if (d.comp.ranking === "time") {
+        if (n.results.slice(0, o.segment).some((x) => x != null && x > v)) return "That is faster than an earlier split. Splits only go up.";
+        if (n.results.slice(o.segment + 1).some((x) => x != null && x < v)) return "That is slower than a later split. Splits only go up.";
+      }
+    }
+    n.results[o.segment] = v;
+    if (v !== null && n.state === "ready" && !allDone(n)) n.state = "racing";
+    if (allDone(n)) n.state = "finished";
+    else if (n.state === "finished") n.state = "racing";
+  } },
+  "entry.state": { roles: OFFICIAL, run(d, o) {
+    if (!d.comp) return notFitness;
+    const n = entryOf(d, o.entry); if (!n) return "Athlete not found.";
+    if (!ENTRY_STATES.includes(o.state)) return "Unknown state.";
+    n.state = o.state;
+  } },
+
   // ---- On the day: football ----
   "fixture.score": { roles: OFFICIAL, run(d, o) {
     const f = fixture(d, o.id); if (!f) return "Game not found.";
@@ -177,6 +251,63 @@ export const OPS = {
     if (o.blue) b.blue = { ...b.blue, ...pick(o.blue, ["name", "club"]) };
   } },
   "bout.remove": { roles: ADMIN, run(d, o) { d.card.bouts = d.card.bouts.filter((b) => b.id !== o.id); delete d.scorecards[o.id]; } },
+  "comp.set": { roles: ADMIN, run(d, o) {
+    if (!d.comp) return notFitness;
+    if (!o.force && anyResult(d)) return "Results have been recorded. Changing the format now would lose them.";
+    const objects = (v) => Array.isArray(v) && v.every((x) => x && typeof x === "object" && !Array.isArray(x));
+    if (o.segments !== undefined && !objects(o.segments)) return "Segments must be a list.";
+    if (o.categories !== undefined && !objects(o.categories)) return "Categories must be a list.";
+    if (o.ranking !== undefined) {
+      if (!RANKINGS.includes(o.ranking)) return "Rank by time or by placings.";
+      d.comp.ranking = o.ranking;
+    }
+    const withIds = (list, prefix, make) => {
+      const used = list.map((x) => x.id).filter(Boolean);
+      return list.map((x) => { let id = x.id; if (!id) { id = newId(prefix, used); used.push(id); } return make(x, id); });
+    };
+    if (o.segments !== undefined) {
+      d.comp.segments = withIds(o.segments, "S", (g, id) => ({ id, name: typeof g.name === "string" ? g.name.trim() : g.name, measure: g.measure ?? "time" }));
+      d.comp.entries.forEach((n) => { n.results = Array.from({ length: d.comp.segments.length }, (_, i) => n.results[i] ?? null); });
+    }
+    if (o.categories !== undefined) d.comp.categories = withIds(o.categories, "C", (k, id) => ({ id, name: typeof k.name === "string" ? k.name.trim() : k.name, size: k.size ?? 1 }));
+  } },
+  "heat.add": { roles: ADMIN, run(d, o) {
+    if (!d.comp) return notFitness;
+    d.comp.heats.push({ id: o.id || newId("H", fitnessIds(d)), time: o.time, name: typeof o.name === "string" ? o.name.trim() : `Heat ${d.comp.heats.length + 1}`, category: o.category || null, state: "scheduled", startedAt: null, endedAt: null });
+  } },
+  "heat.edit": { roles: ADMIN, run(d, o) {
+    if (!d.comp) return notFitness;
+    const h = heatOf(d, o.id); if (!h) return "Heat not found.";
+    Object.assign(h, fieldsOf(o, ["time", "name", "category"]));
+    if (h.category === "") h.category = null;
+  } },
+  "heat.remove": { roles: ADMIN, run(d, o) {
+    if (!d.comp) return notFitness;
+    if (d.comp.entries.some((n) => n.heat === o.id)) return "Athletes are in this heat. Move them first.";
+    d.comp.heats = d.comp.heats.filter((h) => h.id !== o.id);
+  } },
+  "entry.add": { roles: ADMIN, run(d, o) {
+    if (!d.comp) return notFitness;
+    d.comp.entries.push(newEntry(d, o, fitnessIds(d), d.comp.entries.map((n) => n.bib)));
+  } },
+  "entry.edit": { roles: ADMIN, run(d, o) {
+    if (!d.comp) return notFitness;
+    const n = entryOf(d, o.id); if (!n) return "Athlete not found.";
+    Object.assign(n, fieldsOf(o, ["bib", "name", "club", "category", "heat"]));
+    if (n.heat === "") n.heat = null;
+  } },
+  "entry.remove": { roles: ADMIN, run(d, o) {
+    if (!d.comp) return notFitness;
+    d.comp.entries = d.comp.entries.filter((n) => n.id !== o.id);
+  } },
+  "entries.replace": { roles: ADMIN, run(d, o) {
+    if (!d.comp) return notFitness;
+    if (!Array.isArray(o.entries) || !o.entries.every((x) => x && typeof x === "object" && !Array.isArray(x))) return "Entries must be a list.";
+    if (!o.force && anyResult(d)) return "Results have been recorded. Edit athletes one by one instead.";
+    const ids = [...d.comp.heats.map((h) => h.id), ...o.entries.map((x) => x.id).filter(Boolean)];
+    const bibs = o.entries.map((x) => x.bib).filter((b) => typeof b === "number");
+    d.comp.entries = o.entries.map((x) => newEntry(d, x, ids, bibs));
+  } },
   "update.add": { roles: ADMIN, run(d, o, a, now) { d.updates.unshift({ id: newId("U", d.updates.map((u) => u.id)), at: now, title: o.title, body: o.body || "", link: o.link || null }); } },
   "update.remove": { roles: ADMIN, run(d, o) { d.updates = d.updates.filter((u) => u.id !== o.id); } },
 };
@@ -186,7 +317,7 @@ export const allowed = (role) => Object.keys(OPS).filter((k) => OPS[k].roles.inc
 
 // Every id an op names must be a valid id, checked before the op runs, because ids become object
 // keys (scorecards) and "__proto__" there would reach every object in the process.
-const ID_KEYS = ["id", "division", "judge", "team", "pitch", "ref", "home", "away"];
+const ID_KEYS = ["id", "division", "judge", "team", "pitch", "ref", "home", "away", "entry", "heat"];
 const RESERVED = /^(__proto__|constructor|prototype)$/;
 const bad = (v) => typeof v === "string" && RESERVED.test(v);
 const plain = (x) => !!x && typeof x === "object" && ID_KEYS.every((k) => !bad(x[k]));
@@ -195,6 +326,7 @@ function keysSafe(o) {
   if (o.fixture != null && !plain(o.fixture)) return false;
   if (Array.isArray(o.fixtures) && !o.fixtures.every(plain)) return false;
   if (Array.isArray(o.judges) && o.judges.some(bad)) return false;
+  for (const k of ["entries", "segments", "categories"]) if (Array.isArray(o[k]) && !o[k].every(plain)) return false;
   return true;
 }
 

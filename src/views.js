@@ -2,7 +2,7 @@
 // server. doc.private belongs to the server (demo bookkeeping, simulation state) and never
 // leaves at all.
 
-import { publicView, firstName } from "../public/core/model.js";
+import { publicView, firstName, entryLabel } from "../public/core/model.js";
 
 export const withoutPrivate = (doc) => { const d = { ...doc }; delete d.private; return d; };
 
@@ -22,6 +22,9 @@ export function roleView(doc, rev, actor, counts) {
   if (actor.role === "referee" || actor.role === "judge") {
     const official = doc.officials.find((o) => o.id === actor.subject);
     const me = { id: actor.subject, name: official ? official.name : actor.label, role: actor.role, pitch: official ? official.pitch ?? null : null };
+    // A fitness timekeeper needs to know who is who, so referees keep the full entry names (as
+    // coaches keep their full squad). The label is still there for showing the way fans see it.
+    if (actor.role === "referee" && doc.comp) event.comp.entries = doc.comp.entries.map((n) => ({ ...n, label: entryLabel(n, doc.settings.voteBy) }));
     if (actor.role === "judge") {
       // a judge always sees the cards they have scored, even before the bout is decided
       Object.entries(doc.scorecards || {}).forEach(([bout, byJudge]) => {

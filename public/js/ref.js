@@ -10,6 +10,7 @@ import * as Q from "./ref-queue.js";
 import { formatCode, signInHtml, trySignIn } from "./ref-auth.js";
 import * as Foot from "./ref-football.js";
 import * as Box from "./ref-boxing.js";
+import * as Fit from "./ref-fitness.js";
 
 const app = $("#app");
 const live = $("#say");
@@ -171,7 +172,7 @@ function signInView() {
 }
 
 function header(c) {
-  const roleText = c.me.role === "judge" ? "Judge" : c.event.sport === "boxing" ? "Referee and timekeeper" : "Referee";
+  const roleText = c.me.role === "judge" ? "Judge" : c.event.sport === "boxing" ? "Referee and timekeeper" : c.event.sport === "fitness" ? "Timekeeper" : "Referee";
   const where = c.me.pitch ? `, ${esc(((c.event.pitches || []).find((p) => p.id === c.me.pitch) || {}).name || "")}` : "";
   return `<header class="ec-top"><div class="ec-wrap ecr-top">
     <span class="ec-brand"><img src="/assets/brand/shot-logo.png" alt="SHOT" width="44" height="28"></span>
@@ -222,7 +223,7 @@ function eventView() {
     return '<main id="main" class="ecr-main ec-narrow" aria-busy="true"><div class="ec-skel" style="height:120px"></div><div class="ec-skel" style="height:220px;margin-top:12px"></div><p class="ec-dim" role="status">Loading your games…</p></main>';
   }
   const c = ctx();
-  const body = c.me.role === "judge" ? Box.renderJudge(c) : c.event.sport === "boxing" ? Box.renderReferee(c) : Foot.render(c);
+  const body = c.me.role === "judge" ? Box.renderJudge(c) : c.event.sport === "boxing" ? Box.renderReferee(c) : c.event.sport === "fitness" ? Fit.render(c) : Foot.render(c);
   return `${header(c)}<main id="main" class="ecr-main ec-narrow">${banners(c)}${body}${footer(c)}</main>${statusBar(c)}`;
 }
 
@@ -253,7 +254,7 @@ function render() {
   tick();
   if (S.view === "event" && S.server) {
     const c = ctx();
-    const on = c.me.role === "judge" ? Box.boxingLive(c) : c.event.sport === "boxing" ? Box.boxingLive(c) : Foot.anyLive(c);
+    const on = c.me.role === "judge" ? Box.boxingLive(c) : c.event.sport === "boxing" ? Box.boxingLive(c) : c.event.sport === "fitness" ? Fit.anyLive(c) : Foot.anyLive(c);
     wake(on);
   }
 }
@@ -281,12 +282,14 @@ function handle(name, el) {
   const c = ctx();
   if (c.me.role === "judge") return Box.actJudge(c, name, el);
   if (c.event.sport === "boxing") return Box.actReferee(c, name, el);
+  if (c.event.sport === "fitness") return Fit.act(c, name, el);
   return Foot.act(c, name, el);
 }
 
 app.addEventListener("click", (e) => { const el = e.target.closest("[data-act]"); if (el && !el.disabled) handle(el.dataset.act, el); });
 app.addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (e.target.dataset.form === "fit") return handle("fit-save", e.target);
   if (e.target.dataset.form !== "signin" || S.signin.busy) return;
   S.signin.busy = true; S.signin.error = ""; S.signin.href = ""; render();
   const r = await trySignIn(S.signin.value);

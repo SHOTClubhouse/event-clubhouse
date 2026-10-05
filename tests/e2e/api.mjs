@@ -52,10 +52,11 @@ const ok = (r, status = 200) => assert.equal(r.status, status, `expected ${statu
 await step("list demo events with their public codes", async () => {
   const r = await call("GET", "/api/demo");
   ok(r);
-  assert.deepEqual(r.data.events.map((e) => e.slug), ["beach-soccer-cup", "futsal-finals", "sixes-league-night", "fight-night"]);
+  assert.deepEqual(r.data.events.map((e) => e.slug), ["beach-soccer-cup", "futsal-finals", "sixes-league-night", "fight-night", "fitness-race", "fitness-games"]);
   const beach = r.data.events[0];
   assert.equal(beach.live, true);
   assert.equal(r.data.events[3].live, true);
+  assert.deepEqual(r.data.events.slice(4).map((e) => [e.sport, e.live]), [["fitness", true], ["fitness", true]]);
   assert.ok(beach.blurb.length > 20);
   assert.ok(beach.codes.every((c) => /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(c.code) && c.role && c.label));
   S.demo = Object.fromEntries(r.data.events.map((e) => [e.slug, e]));
@@ -81,6 +82,65 @@ await step("sign in with the demo admin code (typed in lower case with spaces)",
   assert.ok(full.data.event.divisions[0].teams[0].players[0].name.includes(" "), "organiser sees full names");
   assert.equal(full.data.event.private, undefined);
   assert.equal(typeof full.data.counts.registrations, "number");
+});
+
+await step("fitness demos: the public view has labels and no names, a timekeeper starts a heat and posts a result, there are no coach codes", async () => {
+  for (const slug of ["fitness-race", "fitness-games"]) {
+    const codes = S.demo[slug].codes;
+    assert.deepEqual(codes.map((c) => c.role), ["admin", "referee", "referee"], "no coach or judge codes for fitness");
+    assert.deepEqual(codes.slice(1).map((c) => c.label), ["Timekeeper, Floor 1", "Timekeeper, Floor 2"]);
+    const signIn = async (role, n = 0) => { const r = await call("POST", "/api/auth", { body: { code: codes.filter((c) => c.role === role)[n].code } }); ok(r); return r.data; };
+    const admin = await signIn("admin");
+    const referee = await signIn("referee");
+    assert.deepEqual([referee.role, referee.event.sport], ["referee", "fitness"]);
+    const full = await call("GET", `/api/events/${slug}/full`, { token: admin.token });
+    ok(full);
+    const names = full.data.event.comp.entries.map((n) => n.name);
+    assert.ok(names.every((n) => n.includes(" ")), "the organiser sees full names");
+    const pub = await call("GET", `/api/events/${slug}`);
+    ok(pub);
+    const json = JSON.stringify(pub.data.event);
+    names.forEach((n) => n.split(" & ").forEach((p) => { assert.ok(!json.includes(p), `${p} reached the public view`); assert.ok(!json.includes(p.split(" ")[1]), `${p} surname reached the public view`); }));
+    assert.ok(pub.data.event.comp.entries.every((n) => /^#\d+ \S/.test(n.label) && n.name === undefined && n.bib > 0), "labels, bibs and no names");
+    assert.ok(json.length < 150000, `public view is ${json.length} bytes`);
+    const rv = await call("GET", `/api/events/${slug}/full`, { token: referee.token });
+    ok(rv);
+    assert.deepEqual(rv.data.event.comp.entries.map((n) => n.name), names, "the timekeeper sees full names");
+    assert.equal(rv.data.event.private, undefined);
+    // the timekeeper starts a heat and posts a result; the public sees it
+    const heat = rv.data.event.comp.heats.find((h) => h.state === "scheduled");
+    const athlete = rv.data.event.comp.entries.find((n) => n.heat === heat.id);
+    const value = slug === "fitness-race" ? 280 : 95;
+    const send = (token, list) => call("POST", `/api/events/${slug}/ops`, { token, body: { ops: list } });
+    const started = await send(referee.token, [{ op: "heat.start", id: heat.id }, { op: "result.set", entry: athlete.id, segment: 0, value }]);
+    ok(started);
+    assert.equal(started.data.event.comp.heats.find((h) => h.id === heat.id).state, "live");
+    assert.equal(started.data.event.comp.entries.find((n) => n.id === athlete.id).name, athlete.name, "the answer keeps the timekeeper's view");
+    const after = (await call("GET", `/api/events/${slug}`)).data.event.comp;
+    assert.equal(after.heats.find((h) => h.id === heat.id).state, "live");
+    assert.equal(after.entries.find((n) => n.id === athlete.id).results[0], value);
+    assert.equal(after.entries.find((n) => n.id === athlete.id).name, undefined);
+    // a timekeeper cannot do the organiser's work, and bad input is refused
+    ok(await send(referee.token, [{ op: "heat.add", time: "23:00" }]), 403);
+    ok(await send(referee.token, [{ op: "entries.replace", entries: [] }]), 403);
+    ok(await send(referee.token, [{ op: "result.set", entry: "__proto__", segment: 0, value: 1 }]), 400);
+    ok(await send(referee.token, [{ op: "result.set", entry: athlete.id, segment: 0, value: 100001 }]), 409);
+    // fans vote for the favourite of the live heat
+    const open = (await call("GET", `/api/events/${slug}/votes`)).data;
+    assert.ok(open.now.some((t) => t.target === `h:${heat.id}`));
+    const other = after.entries.find((n) => n.heat !== heat.id);
+    const v = voter();
+    ok(await call("POST", `/api/events/${slug}/votes`, { body: { voter: v, target: `h:${heat.id}`, choice: other.id, over13: true } }), 400);
+    const cast = await call("POST", `/api/events/${slug}/votes`, { body: { voter: v, target: `h:${heat.id}`, choice: athlete.id, over13: true } });
+    ok(cast);
+    assert.equal(cast.data.tally.heats[0].leaders[0].choice, athlete.id);
+    assert.ok(/^#\d+/.test(cast.data.tally.heats[0].leaders[0].label));
+    ok(await call("POST", `/api/events/${slug}/votes`, { body: { voter: voter(), target: "h:NOPE", choice: athlete.id, over13: true } }), 400);
+    ok(await send(referee.token, [{ op: "heat.end", id: heat.id }]));
+    // put the demo back to its seed
+    ok(await call("POST", `/api/events/${slug}/reset`, { token: admin.token }));
+    assert.equal((await call("GET", `/api/events/${slug}`)).data.event.comp.heats.find((h) => h.id === heat.id).state, "scheduled");
+  }
 });
 
 await step("a wrong code gives the plain-English 401", async () => {
@@ -368,6 +428,44 @@ await step("boxing: a bout runs, the judge sees their own card early, the public
 });
 
 // ---------------------------------------------------------------- registration
+
+await step("fitness: an organiser creates an event, sets it up, issues a timekeeper code, and coach codes cannot exist", async () => {
+  const c = await call("POST", "/api/events", { token: S.orgToken, body: { name: `E2E Race ${stamp}`, sport: "fitness" } });
+  ok(c);
+  assert.deepEqual(c.data.event.comp, { ranking: "time", segments: [], categories: [], heats: [], entries: [] });
+  assert.deepEqual([c.data.event.pitches, c.data.event.divisions], [[], []]);
+  const slug = c.data.slug;
+  const admin = (await call("POST", "/api/auth", { body: { code: c.data.adminCode } })).data.token;
+  const send = (token, list) => call("POST", `/api/events/${slug}/ops`, { token, body: { ops: list } });
+  ok(await send(admin, [
+    { op: "comp.set", ranking: "time", segments: [{ name: "Run 1" }, { name: "Station 1" }, { name: "Run 2" }], categories: [{ name: "Open", size: 1 }, { name: "Doubles", size: 2 }] },
+    { op: "heat.add", time: "10:00", name: "Wave 1", category: "C1" },
+    { op: "entries.replace", entries: [{ name: "Sam Smith", category: "C1", heat: "H1" }, { name: "Alex Jones", category: "C1", heat: "H1" }, { name: "Dee White & Eli Black", category: "C2" }] },
+    { op: "official.add", id: "R1", name: "Tim Keeper", role: "referee" },
+    { op: "settings.set", voteBy: "name", terms: { place: "floor", discipline: "Fitness race" } },
+    { op: "vote.open", open: true },
+  ]));
+  const code = async (body) => call("POST", `/api/events/${slug}/codes`, { token: admin, body });
+  ok(await code({ role: "coach", subject: "T1", label: "Coach" }), 400);
+  ok(await code({ role: "referee", subject: "R9", label: "Nobody" }), 400);
+  const t = await code({ role: "referee", subject: "R1", label: "Timekeeper" });
+  ok(t);
+  const ref = (await call("POST", "/api/auth", { body: { code: t.data.code } })).data.token;
+  const pub = (await call("GET", `/api/events/${slug}`)).data.event;
+  assert.deepEqual(pub.comp.entries.map((n) => n.label), ["Sam", "Alex", "Dee & Eli"]);
+  assert.ok(!JSON.stringify(pub).includes("Smith"));
+  ok(await send(ref, [{ op: "heat.start", id: "H1" }, { op: "result.set", entry: "A1", segment: 0, value: 250 }, { op: "result.set", entry: "A1", segment: 1, value: 520 }, { op: "result.set", entry: "A1", segment: 2, value: 800 }]));
+  ok(await send(ref, [{ op: "result.set", entry: "A2", segment: 0, value: 300 }, { op: "result.set", entry: "A2", segment: 1, value: 100 }]), 409);
+  const mid = (await call("GET", `/api/events/${slug}`)).data.event.comp;
+  assert.deepEqual([mid.entries[0].state, mid.entries[1].results], ["finished", [null, null, null]], "a refused batch changes nothing");
+  ok(await send(ref, [{ op: "comp.set", ranking: "placings" }]), 403);
+  ok(await send(admin, [{ op: "comp.set", ranking: "placings" }]), 409);
+  ok(await send(ref, [{ op: "heat.end", id: "H1" }]));
+  const end = (await call("GET", `/api/events/${slug}`)).data.event.comp;
+  assert.deepEqual(end.entries.map((n) => n.state), ["finished", "dnf", "ready"]);
+  const full = (await call("GET", `/api/events/${slug}/full`, { token: admin })).data;
+  ok(await call("PUT", `/api/events/${slug}/doc`, { token: admin, body: { doc: { ...full.event, comp: { ...full.event.comp, entries: [{ ...full.event.comp.entries[0], bib: full.event.comp.entries[1].bib }, ...full.event.comp.entries.slice(1)] } }, rev: full.rev } }), 422);
+});
 
 await step("registration: ok, duplicate gives the same answer, bad input is refused, only admin can read it", async () => {
   const reg = (body) => call("POST", `/api/events/${S.slug}/register`, { body });

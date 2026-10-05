@@ -27,7 +27,7 @@ const BY_KIND = {
   },
   fitness: {
     intro: "Race day is one day. The clubhouse is your training crew, your times, the music that got you round, and the next start line.",
-    lineup: [{ time: null, name: "DJ Pacemaker", role: "DJ" }, { time: null, name: "Coach Rees", role: "Host" }],
+    lineup: [{ time: null, name: "DJ Pacemaker", role: "DJ" }, { time: null, name: "The Pace Crew", role: "Host" }],
     drops: [{ id: "K1", title: "Finisher patch", body: "For everyone who crossed the line.", when: "Out now" }, { id: "K2", title: "Your splits, explained", body: "Where you gained and where you lost time.", when: "This week" }],
     posts: [{ id: "W1", who: "Harbour Run Club", text: "Twelve of us raced. Twelve of us finished.", kind: "shoutout", ago: "4h" }, { id: "W2", who: "Organiser", text: "Results are final. Find yours by bib.", kind: "post", ago: "8h" }, { id: "W3", who: "Priya", text: "Wall balls nearly finished me. Booked the next one.", kind: "post", ago: "1d", person: true }],
   },

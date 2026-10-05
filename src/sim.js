@@ -11,12 +11,17 @@
 // once their teams are known. Boxing: a bout runs round by round (about a minute and a half a
 // round), the judges score each round after it ends, and the referee records a stoppage or
 // the decision. When everything is finished it waits about five minutes, then resets.
+// Fitness: a heat (wave) starts every few minutes. In a timed race each athlete has a planned
+// pace and the timekeeper posts their splits as they come due, about five times faster than a
+// real race (the splits shown are the real race times). In workout games the heat's workouts are
+// scored one after another. Fans vote for the favourite of each live heat.
 
 import { applyOps } from "../public/core/ops.js";
 import { openTargets } from "../public/core/votes.js";
 import { resolve, standings } from "../public/core/standings.js";
 import { REASONS, toMins, fromMins } from "../public/core/model.js";
 import { londonParts } from "./util.js";
+import { rng } from "./seeds/lib.js";
 
 const ADMIN = { role: "admin", id: null };
 const RESET_WAIT = 5 * 60 * 1000;
@@ -33,7 +38,7 @@ export function simStep(doc, now, rand) {
   const out = { batches: [], votes: [], sim, reset: false };
   if (sim.resetAt && now >= sim.resetAt) { out.reset = true; return out; }
   if (!sim.resetAt && now - sim.progressAt > STALL) { out.reset = true; return out; }
-  (doc.sport === "boxing" ? boxing : football)(doc, now, rand, out);
+  (doc.sport === "boxing" ? boxing : doc.sport === "fitness" ? fitness : football)(doc, now, rand, out);
   return out;
 }
 
@@ -363,4 +368,133 @@ function ring(doc, bouts, st, ref, now, rand, out) {
     out.batches.push({ actor: ref, ops: [{ op: "bout.result", id: cur.id, method: "PTS", winner }] });
   }
   done();
+}
+
+// ---------------------------------------------------------------- fitness
+
+const SPEEDUP = 5; // race seconds for each real second
+const MIN_GAP = 2, MAX_GAP = 8; // minutes between heats, so a quiet spell never nears the stall limit
+const DEFAULT_GAP = 4;
+const FINISH_WAIT = 25000; // workout games: the heat ends this long after the last workout is scored
+
+// Plans come from the heat's seed and the athlete's bib, so they are the same on every tick and
+// nothing big has to be stored. Segments alternate run-like and station-like for a race.
+function paceFor(seed, bib, count) {
+  const r = rng((seed ^ Math.imul(bib, 2654435761)) >>> 0);
+  const skill = 0.72 + r() * 0.34;
+  let t = 0;
+  const cum = Array.from({ length: count }, (_, i) => {
+    const base = i % 2 === 0 ? between(r, 240, 360) : between(r, 180, 480);
+    t += Math.max(1, Math.round(base * skill * (0.9 + r() * 0.2)));
+    return t;
+  });
+  const dns = r() < 0.02;
+  const dnfAt = !dns && count > 1 && r() < 0.03 ? between(r, 1, count - 1) : null;
+  return { cum, dns, dnfAt };
+}
+
+// When each workout of a games heat is scored, as clock times.
+function revealTimes(seed, startAt, count) {
+  const r = rng((seed ^ 0x5bd1e995) >>> 0);
+  let t = startAt;
+  return Array.from({ length: count }, () => (t += between(r, 150, 210) * 1000));
+}
+
+// A workout score: a weight (kg), a rep count or a time (lower is better), from the athlete's own
+// level and a little noise. Pairs lift and rep more between them.
+function scoreFor(seed, bib, index, measure, size) {
+  const skill = 0.8 + rng((seed ^ Math.imul(bib, 2654435761)) >>> 0)() * 0.4;
+  const noise = 0.93 + rng((seed ^ Math.imul(bib, 2654435761) ^ Math.imul(index + 1, 40503)) >>> 0)() * 0.14;
+  const team = size > 1 ? 1.7 : 1;
+  if (measure === "time") return Math.round((420 / skill) * noise);
+  return Math.round((measure === "kg" ? 90 : 80) * team * skill * noise);
+}
+
+const londonMinute = (ms) => { const p = londonParts(ms); return p.hour * 60 + p.minute; };
+
+// Minutes between heats: the spacing the document already has, kept within the limits above.
+function gapOf(c) {
+  const times = c.heats.map((h) => toMins(h.time));
+  let gap = times.length > 1 ? (times[1] - times[0] + 1440) % 1440 : 0;
+  if (!gap) gap = DEFAULT_GAP;
+  return Math.min(MAX_GAP, Math.max(MIN_GAP, gap));
+}
+
+function fitness(doc, now, rand, out) {
+  const { sim } = out;
+  const c = doc.comp;
+  if (!c.heats.length || c.heats.every((h) => h.state === "done")) { finished(out, now, rand); return; }
+  if (sim.gap == null) sim.gap = gapOf(c);
+  sim.heats = sim.heats || {};
+  Object.keys(sim.heats).forEach((id) => { const h = c.heats.find((x) => x.id === id); if (!h || h.state !== "live") delete sim.heats[id]; });
+  const referee = doc.officials.find((o) => o.role === "referee");
+  const ref = referee ? { role: "referee", id: referee.id } : ADMIN;
+  const segs = c.segments;
+
+  // fan votes on heats that are live right now
+  openTargets(doc, now).filter((t) => t.kind === "heat" && t.state === "live").forEach((t) => {
+    for (let i = between(rand, 1, 3); i > 0; i--) {
+      const choice = t.choices[Math.floor(rand() ** 2 * t.choices.length)];
+      out.votes.push({ voter: simVoter(rand), target: t.target, choice: choice.choice, reason: null, ip_hash: "sim", at: now });
+    }
+  });
+
+  // live heats: post what has come due, and end the heat once everyone is done or has dropped out
+  const sizeOf = (n) => (c.categories.find((k) => k.id === n.category) || { size: 1 }).size;
+  c.heats.filter((h) => h.state === "live").forEach((h) => {
+    const plan = sim.heats[h.id] || (sim.heats[h.id] = { seed: between(rand, 1, 2 ** 30), startAt: h.startedAt ?? now });
+    const racing = c.entries.filter((n) => n.heat === h.id && n.state === "racing");
+    const post = [];
+    let settled = true;
+    if (c.ranking === "time") {
+      const elapsed = ((now - plan.startAt) / 1000) * SPEEDUP;
+      racing.forEach((n) => {
+        const p = paceFor(plan.seed, n.bib, segs.length);
+        const limit = p.dnfAt ?? segs.length;
+        for (let k = 0; k < limit; k++) if (n.results[k] == null && p.cum[k] <= elapsed) post.push({ op: "result.set", entry: n.id, segment: k, value: p.cum[k] });
+        if (p.dnfAt == null ? !segs.every((_, k) => n.results[k] != null || p.cum[k] <= elapsed) : p.cum[p.dnfAt] > elapsed) settled = false;
+      });
+    } else {
+      const times = revealTimes(plan.seed, plan.startAt, segs.length);
+      segs.forEach((g, k) => {
+        if (times[k] > now) return;
+        racing.forEach((n) => { if (n.results[k] == null) post.push({ op: "result.set", entry: n.id, segment: k, value: scoreFor(plan.seed, n.bib, k, g.measure, sizeOf(n)) }); });
+      });
+      settled = !segs.length || now >= times[segs.length - 1] + FINISH_WAIT;
+    }
+    if (post.length) { out.batches.push({ actor: ref, ops: post }); progress(out, now); }
+    if (settled) {
+      out.batches.push({ actor: ref, ops: [{ op: "heat.end", id: h.id }] });
+      delete sim.heats[h.id]; // its plan is no longer needed, so the next tick has nothing left to tidy
+      progress(out, now);
+    }
+  });
+
+  // the next heat goes out when its time comes
+  const next = c.heats.find((h) => h.state === "scheduled");
+  const starts = [];
+  let starting = null;
+  if (next && now >= (sim.nextStartAt || 0)) {
+    const plan = { seed: between(rand, 1, 2 ** 30), startAt: now };
+    sim.heats[next.id] = plan;
+    sim.nextStartAt = now + sim.gap * 60000 + between(rand, -30, 30) * 1000;
+    starting = next;
+    const dns = c.entries.filter((n) => n.heat === next.id && n.state === "ready" && paceFor(plan.seed, n.bib, segs.length).dns);
+    starts.push({ actor: ref, ops: [...dns.map((n) => ({ op: "entry.state", entry: n.id, state: "dns" })), { op: "heat.start", id: next.id }] });
+    progress(out, now);
+  }
+
+  // heat times follow the real London clock: the one starting now at this minute, the ones to
+  // come at the gap from its start. Only a heat whose time changes gets an edit.
+  const ops = [];
+  if (starting) {
+    const t = fromMins(londonMinute(now));
+    if (t !== starting.time) ops.push({ op: "heat.edit", id: starting.id, time: t });
+  }
+  c.heats.filter((h) => h.state === "scheduled" && h !== starting).forEach((h, k) => {
+    const t = fromMins(londonMinute(sim.nextStartAt || now) + k * sim.gap);
+    if (t !== h.time) ops.push({ op: "heat.edit", id: h.id, time: t });
+  });
+  if (ops.length) out.batches.push({ actor: ADMIN, ops });
+  out.batches.push(...starts);
 }

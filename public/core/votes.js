@@ -11,10 +11,14 @@
 // fans' fighter of the night.
 //   target "r:<boutId>:<round>", choice "red" | "blue", reason one of REASONS or null
 //
+// Fitness: the fan favourite of each heat. While a heat is live, and for lockSecs after it ends,
+// fans pick one athlete (or pair) in that heat, shown by bib, first names or both.
+//   target "h:<heatId>", choice an entry id in that heat
+//
 // Nobody nominates anyone and the scorer does nothing: what's votable follows the game and
 // bout states the officials already set.
 
-import { REASONS, playerLabel } from "./model.js";
+import { REASONS, playerLabel, entryLabel } from "./model.js";
 import { resolve } from "./standings.js";
 
 export const VOTER = /^[A-Za-z0-9_-]{16,64}$/;
@@ -55,6 +59,19 @@ function roundLeft(doc, b, n, now) {
   return end != null ? end + lockMs(doc) - now : 0;
 }
 
+// ---- Fitness ----
+function heatLeft(doc, h, now) {
+  if (h.state === "live") return Infinity;
+  if (h.state === "done" && h.endedAt != null) return h.endedAt + lockMs(doc) - now;
+  return 0;
+}
+
+// Athletes a fan can pick in a heat: everyone in it who started.
+const heatChoices = (doc, h) => doc.comp.entries
+  .filter((n) => n.heat === h.id && n.state !== "dns")
+  .sort((a, b) => a.bib - b.bib)
+  .map((n) => ({ choice: n.id, label: entryLabel(n, doc.settings.voteBy), bib: n.bib }));
+
 // Everything fans can vote on right now.
 export function openTargets(doc, now = Date.now()) {
   if (!isOpen(doc)) return [];
@@ -64,6 +81,12 @@ export function openTargets(doc, now = Date.now()) {
       if (!gameVotes(divisionOf(doc, f))) return;
       const left = gameLeft(doc, f, now);
       if (left > 0) out.push({ kind: "game", target: `g:${f.id}`, id: f.id, time: f.time, pitch: f.pitch ?? null, stage: f.stage ?? null, division: divisionOf(doc, f).name, state: f.state, locksIn: left === Infinity ? null : Math.ceil(left / 1000), sides: choicesFor(doc, f) });
+    });
+  } else if (doc.sport === "fitness") {
+    doc.comp.heats.forEach((h) => {
+      const left = heatLeft(doc, h, now);
+      const choices = left > 0 ? heatChoices(doc, h) : [];
+      if (choices.length) out.push({ kind: "heat", target: `h:${h.id}`, id: h.id, name: h.name, time: h.time, category: h.category ?? null, state: h.state, locksIn: left === Infinity ? null : Math.ceil(left / 1000), choices });
     });
   } else {
     (doc.card.bouts || []).forEach((b) => {
@@ -87,8 +110,12 @@ export function checkVote(body, doc, now = Date.now()) {
   const target = typeof b.target === "string" ? b.target : "";
   const open = openTargets(doc, now).find((t) => t.target === target);
   if (!open) {
-    const known = doc.sport === "football" ? doc.fixtures.some((f) => `g:${f.id}` === target) : /^r:/.test(target);
-    return { ok: false, status: known ? 409 : 400, error: known ? "Voting for this one has closed or hasn't opened yet." : "Pick from a game or round that's on now." };
+    const known = doc.sport === "football" ? doc.fixtures.some((f) => `g:${f.id}` === target) : doc.sport === "fitness" ? doc.comp.heats.some((h) => `h:${h.id}` === target) : /^r:/.test(target);
+    return { ok: false, status: known ? 409 : 400, error: known ? "Voting for this one has closed or hasn't opened yet." : doc.sport === "fitness" ? "Pick from a heat that's on now." : "Pick from a game or round that's on now." };
+  }
+  if (open.kind === "heat") {
+    if (!open.choices.some((c) => c.choice === b.choice)) return { ok: false, status: 400, error: "Pick an athlete from this heat." };
+    return { ok: true, vote: { voter: b.voter, target, choice: b.choice, reason: null } };
   }
   if (open.kind === "game") {
     const ok = open.sides.some((s) => s.players.some((p) => p.choice === b.choice));
@@ -114,6 +141,7 @@ export function tally(counts, doc, now = Date.now()) {
       .sort((a, b) => b.votes - a.votes || a.label.localeCompare(b.label)).slice(0, SHOWN);
     return result;
   }
+  if (doc.sport === "fitness") return fitnessTally(rows, doc, result);
   const bouts = Object.fromEntries((doc.card.bouts || []).map((b) => [b.id, b]));
   const rounds = {}, fighters = {};
   rows.forEach((r) => {
@@ -129,5 +157,29 @@ export function tally(counts, doc, now = Date.now()) {
   });
   result.rounds = Object.values(rounds).sort((a, b) => (bouts[a.bout].order - bouts[b.bout].order) || a.round - b.round);
   result.fighters = Object.values(fighters).sort((a, b) => b.votes - a.votes || a.name.localeCompare(b.name)).slice(0, SHOWN);
+  return result;
+}
+
+// Fitness: the favourite of each heat, and the top athletes across the event. A vote counts only
+// while its athlete is still in the heat it was cast for.
+function fitnessTally(rows, doc, result) {
+  const heats = Object.fromEntries(doc.comp.heats.map((h) => [`h:${h.id}`, h]));
+  const entries = Object.fromEntries(doc.comp.entries.map((n) => [n.id, n]));
+  const byHeat = {}, overall = {};
+  rows.forEach((r) => {
+    const h = heats[r.target], n = entries[r.choice];
+    if (!h || !n || n.heat !== h.id) return;
+    byHeat[r.target] = byHeat[r.target] || {};
+    byHeat[r.target][n.id] = (byHeat[r.target][n.id] || 0) + r.n;
+    overall[n.id] = (overall[n.id] || 0) + r.n;
+  });
+  const row = (id, votes) => ({ choice: id, label: entryLabel(entries[id], doc.settings.voteBy), bib: entries[id].bib, category: entries[id].category, heat: entries[id].heat, votes });
+  const order = (a, b) => b.votes - a.votes || a.bib - b.bib;
+  result.heats = Object.entries(byHeat).map(([target, counts]) => ({
+    target, heat: heats[target].id, name: heats[target].name,
+    votes: Object.values(counts).reduce((a, b) => a + b, 0),
+    leaders: Object.entries(counts).map(([id, v]) => row(id, v)).sort(order).slice(0, 3),
+  })).sort((a, b) => doc.comp.heats.findIndex((h) => h.id === a.heat) - doc.comp.heats.findIndex((h) => h.id === b.heat));
+  result.leaders = Object.entries(overall).map(([id, v]) => row(id, v)).sort(order).slice(0, SHOWN);
   return result;
 }

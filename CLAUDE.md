@@ -8,7 +8,7 @@ Read `docs/BRIEF.md` (what and why), `docs/API.md` (the contract) and the module
 - `public/core/` shared rules, run by the browser, the Worker and the tests: `model.js` (event
   document, validation, what fans may see), `ops.js` (every change and who may make it),
   `generator.js` (fixtures), `standings.js` (tables, knockouts), `boxing.js` (scorecards,
-  decisions, bout states), `votes.js` (fan voting).
+  decisions, bout states), `fitness.js` (leaderboards for timed races and workout games), `votes.js` (fan voting).
 - `public/js/api.js` browser client (sessions, polling); `public/js/ui.js` helpers;
   `public/css/app.css` shared styles (`ec-` classes).
 - Pages: `public/index.html` (product site), `demo/`, `event/` (fan app at `/e/<slug>/`),

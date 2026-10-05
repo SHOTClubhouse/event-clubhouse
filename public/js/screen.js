@@ -4,6 +4,7 @@
 import { watchEvent, api } from "/js/api.js";
 import { applyTheme, esc, side } from "/js/ui.js";
 import { buildSlides, goalHtml } from "/js/screen-slides.js";
+import { finishers } from "/js/fit-screen.js";
 
 const slug = (location.pathname.match(/^\/e\/([^/]+)/) || [])[1] || "";
 const $ = (s) => document.querySelector(s);
@@ -111,6 +112,7 @@ function onChange(ev) {
   const old = S.event;
   S.event = ev;
   detectGoals(old, ev);
+  if (ev.sport === "fitness") finishers(old, ev);
   applyTheme(ev); paintHead(); paintFooter();
   show(false);
   playGoal();

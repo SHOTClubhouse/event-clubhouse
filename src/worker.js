@@ -317,7 +317,7 @@ async function createEvent(env, request, now) {
   const body = await readJson(request);
   const name = text(body.name, 80);
   if (!name) return fail(400, "Give the event a name (up to 80 characters).");
-  if (!SPORTS.includes(body.sport)) return fail(400, "Pick football or boxing.");
+  if (!SPORTS.includes(body.sport)) return fail(400, "Pick football, boxing or fitness.");
   let date = null;
   if (body.date != null && body.date !== "") {
     if (typeof body.date !== "string" || !DATE.test(body.date) || Number.isNaN(Date.parse(body.date))) return fail(400, "Use a date like 2026-10-31.");

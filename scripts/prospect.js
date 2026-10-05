@@ -49,7 +49,7 @@ list.forEach((p, i) => {
   if (p.slug != null && !/^p-[a-z0-9]{10}$/.test(p.slug)) problems.push(`${at}: slug is p- and 10 lower-case letters or numbers (the existing link)`);
   const seed = SEEDS[p.seed || "beach-soccer-cup"];
   if (seed && p.recipe != null) {
-    if (!seed.recipes) problems.push(`${at}: the ${p.seed} demo can't take a recipe; use beach-soccer-cup or fight-night`);
+    if (!seed.recipes) problems.push(`${at}: the ${p.seed} demo can't take a recipe; use a seed with recipes: ${Object.values(SEEDS).filter((s) => s.recipes).map((s) => s.slug).join(", ")}`);
     else problems.push(...recipeErrors(seed.kind, p.recipe).map((e) => `${at}: ${e}`));
   }
   if (!problems.some((x) => x.startsWith(`${at}:`))) {

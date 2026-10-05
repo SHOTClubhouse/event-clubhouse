@@ -1,4 +1,4 @@
-// Applies schema.sql, then inserts or replaces the four demo events and their public demo codes.
+// Applies schema.sql, then inserts or replaces the demo events and their public demo codes.
 //
 //   node scripts/seed.js --local      this machine's D1 (hashes codes with SECRET from .dev.vars)
 //   node scripts/seed.js --remote     the live D1 (set SECRET in the environment first; it must
@@ -25,7 +25,8 @@ for (const slug of SEED_ORDER) {
     codes.push({ id: `${eventId(slug)}-${i + 1}`, hash: await hashCode(secret, normaliseCode(c.code)), role: c.role, subject: c.subject, label: c.label });
   }
   statements.push(...demoStatements({ id: eventId(slug), slug, doc, votes, codes, listed: true, now }));
-  console.log(`${slug}: ${doc.fixtures.length || doc.card.bouts.length} ${doc.sport === "football" ? "games" : "bouts"}, ${votes.length} seeded votes, ${codes.length} codes`);
+  const units = doc.sport === "fitness" ? `${doc.comp.heats.length} heats, ${doc.comp.entries.length} athletes` : `${doc.fixtures.length || doc.card.bouts.length} ${doc.sport === "football" ? "games" : "bouts"}`;
+  console.log(`${slug}: ${units}, ${votes.length} seeded votes, ${codes.length} codes`);
 }
 
 runSql(mode, toSql(statements));

@@ -8,7 +8,9 @@ import { SEEDS, SEED_ORDER, buildDemo, demoStatements } from "../src/seeds/index
 import { simStep, runStep } from "../src/sim.js";
 import { rng, recipeErrors, codesFor } from "../src/seeds/lib.js";
 import { toSql } from "../scripts/lib.js";
-import { validate } from "../public/core/model.js";
+import { validate, publicView } from "../public/core/model.js";
+import { applyOps } from "../public/core/ops.js";
+import { leaderboard, segmentsDone } from "../public/core/fitness.js";
 import { champion } from "../public/core/standings.js";
 import { tally } from "../public/core/votes.js";
 import { decision } from "../public/core/boxing.js";
@@ -135,7 +137,7 @@ test("every demo seed builds a valid event, with valid unique public codes that 
     }
     votes.forEach((v) => assert.ok(v.voter.length >= 16));
   }
-  assert.equal(SEED_ORDER.length, 4);
+  assert.equal(SEED_ORDER.length, 6);
 });
 
 test("the demos have the shapes the brief asks for", () => {
@@ -484,6 +486,298 @@ test("recipe problems are reported in plain words", () => {
   assert.ok(recipeErrors("football", { slug: "x" }).some((e) => /not something/.test(e)));
   assert.ok(recipeErrors("boxing", { judges: 2 }).length);
   assert.ok(recipeErrors("boxing", { bouts: [] }).length);
+});
+
+// ---- fitness demos ----
+test("the fitness demos have the shapes the contract asks for", () => {
+  const race = buildDemo("fitness-race", NOW).doc;
+  assert.deepEqual([race.sport, race.phase, race.comp.ranking], ["fitness", "live", "time"]);
+  assert.equal(race.comp.segments.length, 16);
+  assert.deepEqual(race.comp.segments.map((s) => s.name.split(" ")[0] === "Run"), Array.from({ length: 16 }, (_, i) => i % 2 === 0), "a run, then a station, eight times");
+  assert.ok(race.comp.segments.every((s) => s.measure === "time"));
+  assert.deepEqual(race.comp.categories.map((c) => [c.name, c.size]), [["Open Women", 1], ["Open Men", 1], ["Pro Women", 1], ["Pro Men", 1], ["Doubles Mixed", 2]]);
+  assert.equal(race.comp.heats.length, 16);
+  assert.ok(race.comp.heats.every((h) => h.state === "scheduled" && race.comp.entries.filter((n) => n.heat === h.id).length === 10));
+  assert.equal(race.comp.entries.length, 160);
+  assert.equal(Math.min(...race.comp.entries.map((n) => n.bib)), 101);
+  assert.ok(race.comp.entries.every((n) => n.name.split(" & ").length === (race.comp.categories.find((c) => c.id === n.category).size === 2 ? 2 : 1)));
+  assert.equal(race.comp.heats[0].time, londonParts(NOW).hhmm, "the first wave is timed at the London clock now");
+  assert.deepEqual([race.pitches, race.divisions, race.fixtures, race.card.bouts], [[], [], [], []]);
+  assert.deepEqual([race.settings.vote.open, race.settings.terms.place], [true, "arena"]);
+
+  const games = buildDemo("fitness-games", NOW).doc;
+  assert.deepEqual([games.comp.ranking, games.comp.segments.map((s) => s.measure)], ["placings", ["kg", "time", "reps"]]);
+  assert.deepEqual(games.comp.categories.map((c) => c.size), [1, 1, 2]);
+  assert.equal(games.comp.heats.length, 8);
+  assert.ok(games.comp.heats.every((h) => games.comp.entries.filter((n) => n.heat === h.id).length === 8));
+  assert.equal(games.settings.terms.place, "floor");
+
+  for (const slug of ["fitness-race", "fitness-games"]) {
+    const { seed, doc } = buildDemo(slug, NOW);
+    assert.deepEqual([seed.kind, seed.recipes, seed.sim], ["fitness", true, "fitness"]);
+    assert.deepEqual(seed.codes.map((c) => [c.role, c.subject]), [["admin", null], ["referee", "R1"], ["referee", "R2"]]);
+    assert.deepEqual(seed.codes.slice(1).map((c) => c.label), ["Timekeeper, Floor 1", "Timekeeper, Floor 2"]);
+    assert.ok(seed.codes.every((c) => c.code.startsWith(slug === "fitness-race" ? "FTR" : "FTG") && /^[A-HJKMNP-Z2-9]{12}$/.test(c.code)), "12 characters from the code alphabet");
+    assert.ok(!seed.codes.some((c) => c.role === "coach"), "no coach codes");
+    assert.deepEqual(codesFor(doc).map((c) => [c.role, c.subject, c.label]), seed.codes.map((c) => [c.role, c.subject, c.label]));
+    const text = JSON.stringify(doc).toLowerCase();
+    for (const brand of ["hyrox", "crossfit", "concept2", "peloton", "nike", "adidas", "reebok"]) assert.ok(!text.includes(brand), brand);
+  }
+  assert.deepEqual(SEED_ORDER.slice(-2), ["fitness-race", "fitness-games"]);
+  assert.deepEqual(SEED_ORDER.slice(0, 4), ["beach-soccer-cup", "futsal-finals", "sixes-league-night", "fight-night"]);
+});
+
+test("a fitness recipe sets the format, the heats and the wording, and survives a reset", () => {
+  const now = Date.parse("2026-10-05T10:00:00Z");
+  const recipe = { name: "Club Games", ranking: "placings", segments: [{ name: "Lift", measure: "kg" }, "Row"], categories: ["Women", "Men", { name: "Pairs", size: 2 }], heats: 4, perHeat: 6, gapMins: 5, terms: { place: "floor", discipline: "Club games" } };
+  assert.deepEqual(recipeErrors("fitness", recipe), []);
+  const { doc } = buildDemo("fitness-race", now, { slug: "p-abcdefghij", name: "Prospect Games", accent: "#123456", recipe });
+  assert.deepEqual(validate(doc), []);
+  assert.deepEqual(doc.comp.segments.map((s) => [s.id, s.name, s.measure]), [["S1", "Lift", "kg"], ["S2", "Row", "time"]]);
+  assert.deepEqual(doc.comp.categories.map((c) => [c.id, c.name, c.size]), [["C1", "Women", 1], ["C2", "Men", 1], ["C3", "Pairs", 2]]);
+  assert.equal(doc.comp.heats.length, 4);
+  assert.deepEqual(doc.comp.heats.map((h) => h.category), ["C1", "C2", "C3", "C1"], "heats take the categories in turn");
+  assert.equal(doc.comp.entries.length, 24);
+  assert.ok(doc.comp.entries.filter((n) => n.category === "C3").every((n) => n.name.includes(" & ")));
+  assert.deepEqual(doc.comp.heats.map((h) => h.time), ["10:00", "10:05", "10:10", "10:15"].map((t) => t.replace(/^10/, londonParts(now).hhmm.slice(0, 2))));
+  assert.deepEqual([doc.name, doc.settings.terms.place, doc.settings.terms.discipline], ["Prospect Games", "floor", "Club games"]);
+  assert.deepEqual(doc.private.demo.overrides.recipe, recipe);
+  assert.deepEqual(codesFor(doc).map((c) => c.label), ["Organiser", "Timekeeper, Floor 1", "Timekeeper, Floor 2"]);
+  // a timed race has only time segments, whatever the recipe says
+  const timed = buildDemo("fitness-games", now, { slug: "p-abcdefghij", name: "Timed", accent: "#123456", recipe: { ranking: "time" } }).doc;
+  assert.deepEqual(validate(timed), []);
+  assert.ok(timed.comp.segments.every((s) => s.measure === "time"));
+  // with no recipe the public demo is unchanged
+  assert.equal(buildDemo("fitness-race", now).doc.comp.entries.length, 160);
+  // and a prospect's copy is simulated like the demo it came from
+  let d = doc;
+  const rand = rng(2);
+  for (let t = now; t < now + minutes(30); t += 20000) { const r = runStep(d, t, rand); assert.deepEqual(r.errors, []); if (r.reset) break; d = r.doc; }
+  assert.ok(d.comp.heats.some((h) => h.state !== "scheduled"));
+});
+
+test("fitness recipe problems are reported in plain words", () => {
+  assert.deepEqual(recipeErrors("fitness", { heats: 8, perHeat: 8, gapMins: 6, segments: ["Run"], categories: [{ name: "Open", size: 4 }] }), []);
+  assert.ok(recipeErrors("fitness", { ranking: "fastest" }).some((e) => /recipe.ranking/.test(e)));
+  assert.ok(recipeErrors("fitness", { segments: [] }).length);
+  assert.ok(recipeErrors("fitness", { segments: Array.from({ length: 21 }, () => "x") }).length);
+  assert.ok(recipeErrors("fitness", { segments: [{ name: "Lift", measure: "stone" }] }).length);
+  assert.ok(recipeErrors("fitness", { categories: [{ name: "Open", size: 3 }] }).length);
+  assert.ok(recipeErrors("fitness", { categories: [""] }).length);
+  assert.ok(recipeErrors("fitness", { heats: 0 }).length);
+  assert.ok(recipeErrors("fitness", { heats: 2.5 }).length);
+  assert.ok(recipeErrors("fitness", { perHeat: 51 }).length);
+  assert.ok(recipeErrors("fitness", { gapMins: 31 }).length);
+  assert.ok(recipeErrors("fitness", { heats: 40, perHeat: 30 }).some((e) => /800/.test(e)));
+  assert.ok(recipeErrors("fitness", { slug: "x" }).some((e) => /not something/.test(e)));
+  assert.ok(recipeErrors("fitness", { teams: ["A", "B"] }).some((e) => /not something/.test(e)), "football keys are not fitness keys");
+});
+
+test("fitness role views: the public sees labels, timekeepers and the organiser see full names", () => {
+  const doc = buildDemo("fitness-race", NOW).doc;
+  doc.private = { sim: { secret: true } };
+  const people = doc.comp.entries.flatMap((n) => n.name.split(" & "));
+  const everyone = (v) => JSON.stringify(v);
+  const pub = publicView(doc);
+  people.forEach((p) => { assert.ok(!everyone(pub).includes(p), `${p} reached the public view`); assert.ok(!everyone(pub).includes(p.split(" ")[1]), `${p} surname reached the public view`); });
+  const referee = roleView(doc, 3, { role: "referee", subject: "R1", label: "Timekeeper, Floor 1" });
+  assert.deepEqual(referee.me, { id: "R1", name: doc.officials[0].name, role: "referee", pitch: null });
+  assert.deepEqual(referee.event.comp.entries.map((n) => n.name), doc.comp.entries.map((n) => n.name), "full names for the timekeeper");
+  assert.ok(referee.event.comp.entries.every((n) => /^#\d+ \S+/.test(n.label)));
+  assert.equal(referee.event.private, undefined);
+  assert.ok(!everyone(referee).includes("secret"));
+  const admin = roleView(doc, 3, { role: "admin", subject: null, label: "Organiser" });
+  assert.equal(admin.event.comp.entries[0].name, doc.comp.entries[0].name);
+  assert.equal(admin.event.private, undefined);
+  const judge = roleView(doc, 3, { role: "judge", subject: "J1", label: "Judge" });
+  assert.ok(!everyone(judge).includes(doc.comp.entries[0].name), "only the timekeeper and organiser get names");
+  const coach = roleView(doc, 3, { role: "coach", subject: "T1", label: "Coach" });
+  assert.deepEqual(coach.squad, []);
+  assert.ok(!everyone(coach).includes(doc.comp.entries[0].name));
+});
+
+// ---- the fitness simulation ----
+const minOf = (ms) => { const p = londonParts(ms); return p.hour * 60 + p.minute; };
+const deltaMins = (hhmm, ms) => { const [h, m] = hhmm.split(":").map(Number); let d = (h * 60 + m - minOf(ms)) % 1440; if (d < -720) d += 1440; if (d >= 720) d -= 1440; return d; };
+
+function fitnessRun(slug, mins, seed, tickSecs = 20) {
+  let doc = buildDemo(slug, NOW).doc;
+  const rand = rng(seed);
+  const log = { resets: 0, firstReset: null, errors: [], votes: 0, ticks: 0, quiet: 0, timing: 0, live: new Set(), maxLive: 0, finished: 0, dnf: 0, dns: 0, lastDoc: null, durations: {}, finishTimes: [], scored: new Set(), badVotes: 0, regress: 0, boards: 0 };
+  for (let t = NOW; t < NOW + minutes(mins); t += tickSecs * 1000) {
+    log.ticks++;
+    const step = simStep(doc, t, rng(t));
+    if (step.batches.some((b) => b.ops.some((o) => o.op === "heat.edit"))) log.timing++;
+    const r = runStep(doc, t, rng(t));
+    if (r.reset) { log.resets++; log.firstReset ??= (t - NOW) / 60000; doc = buildDemo(slug, t).doc; continue; }
+    log.errors.push(...r.errors);
+    assert.deepEqual(validate(r.doc), [], `${slug} at ${(t - NOW) / 60000} min`);
+    if (!step.batches.length && !step.sim.resetAt) { log.quiet++; assert.equal(JSON.stringify(r.doc), JSON.stringify(doc), "a quiet tick writes nothing"); }
+    r.votes.forEach((v) => {
+      const h = doc.comp.heats.find((x) => `h:${x.id}` === v.target); // votes are drawn from the document the step started with
+      const n = doc.comp.entries.find((x) => x.id === v.choice);
+      if (!h || h.state !== "live" || !n || n.heat !== h.id || n.state === "dns" || !/^sim-voter-\d{6}$/.test(v.voter) || v.ip_hash !== "sim") log.badVotes++;
+    });
+    log.votes += r.votes.length;
+    r.doc.comp.entries.forEach((n, i) => n.results.forEach((v, k) => { const was = doc.comp.entries[i].results[k]; if (was != null && was !== v) log.regress++; }));
+    r.doc.comp.heats.forEach((h, i) => {
+      if (h.state === "live") log.live.add(h.id);
+      if (h.state === "done" && doc.comp.heats[i].state === "live") log.durations[h.id] = (h.endedAt - h.startedAt) / 60000;
+    });
+    log.maxLive = Math.max(log.maxLive, r.doc.comp.heats.filter((h) => h.state === "live").length);
+    const states = (s) => r.doc.comp.entries.filter((n) => n.state === s).length;
+    log.finished = Math.max(log.finished, states("finished")); log.dnf = Math.max(log.dnf, states("dnf")); log.dns = Math.max(log.dns, states("dns"));
+    r.doc.comp.categories.forEach((c) => { if (leaderboard(r.doc, c.id).some((row) => row.rank != null)) log.boards++; });
+    r.doc.comp.heats.forEach((h) => { const done = Math.max(...r.doc.comp.entries.filter((n) => n.heat === h.id).map((n) => segmentsDone(n))); log.scored.add(`${h.state}:${done}`); });
+    doc = r.doc;
+    log.lastDoc = doc;
+  }
+  return { doc, log };
+}
+
+test("the fitness race simulation: waves go out, splits are posted and only ever go up, finishers appear, votes come in, and it resets", () => {
+  const { log } = fitnessRun("fitness-race", 100, 21);
+  assert.deepEqual(log.errors, []);
+  assert.equal(log.regress, 0, "a posted result never changes");
+  assert.equal(log.badVotes, 0, "fan votes go to athletes in live heats");
+  assert.equal(log.live.size, 16, "every wave goes out");
+  assert.ok(log.maxLive >= 4 && log.maxLive <= 7, `waves on the course at once: ${log.maxLive}`);
+  assert.ok(log.finished >= 120, `finishers: ${log.finished}`);
+  assert.ok(log.dnf >= 1 && log.dns >= 1, `dnf ${log.dnf}, dns ${log.dns}`);
+  assert.ok(log.boards > 500, "the leaderboards fill");
+  assert.ok(log.votes > 1000, `votes: ${log.votes}`);
+  assert.ok(log.resets >= 1 && log.firstReset > 80 && log.firstReset <= 95, `first reset at ${log.firstReset} minutes`);
+  assert.ok(log.quiet >= 5, `quiet ticks: ${log.quiet}`);
+  const spans = Object.values(log.durations);
+  assert.ok(spans.length >= 15 && spans.every((m) => m >= 10 && m <= 24), `a wave is over in about 15 to 20 minutes: ${spans.map((m) => m.toFixed(1))}`);
+});
+
+test("race splits look like a real race: finish times of about 55 to 100 minutes, runs of 4 to 6 minutes, stations of 3 to 8", () => {
+  const rand = rng(8);
+  let doc = buildDemo("fitness-race", NOW).doc;
+  const finishes = [], legs = [];
+  const seen = new Set();
+  for (let t = NOW; t < NOW + minutes(88); t += 20000) {
+    const r = runStep(doc, t, rand);
+    if (r.reset) break;
+    doc = r.doc;
+    doc.comp.entries.filter((n) => n.state === "finished" && !seen.has(n.id)).forEach((n) => {
+      seen.add(n.id);
+      finishes.push(n.results[15]);
+      n.results.forEach((v, k) => legs.push([k, v - (k ? n.results[k - 1] : 0)]));
+    });
+  }
+  assert.ok(finishes.length >= 100);
+  assert.ok(Math.min(...finishes) >= 54 * 60 && Math.max(...finishes) <= 102 * 60, `finish times ${Math.min(...finishes)} to ${Math.max(...finishes)} s`);
+  const runs = legs.filter(([k]) => k % 2 === 0).map(([, s]) => s), stations = legs.filter(([k]) => k % 2 === 1).map(([, s]) => s);
+  assert.ok(Math.min(...runs) >= 4 * 60 * 0.6 && Math.max(...runs) <= 6 * 60 * 1.2, `runs ${Math.min(...runs)} to ${Math.max(...runs)} s`);
+  assert.ok(Math.min(...stations) >= 3 * 60 * 0.6 && Math.max(...stations) <= 8 * 60 * 1.2, `stations ${Math.min(...stations)} to ${Math.max(...stations)} s`);
+  assert.equal(new Set(finishes).size > 50, true, "a spread of times");
+});
+
+test("the workout games simulation: heats go out, workouts are scored in turn, placings fill, and it resets", () => {
+  const { log, doc } = fitnessRun("fitness-games", 70, 4);
+  assert.deepEqual(log.errors, []);
+  assert.equal(log.regress, 0);
+  assert.equal(log.badVotes, 0);
+  assert.equal(log.live.size, 8, "every heat goes out");
+  assert.ok(log.maxLive >= 1 && log.maxLive <= 3, `heats on the floor at once: ${log.maxLive}`);
+  assert.ok(log.votes > 200, `votes: ${log.votes}`);
+  assert.ok(log.resets >= 1 && log.firstReset > 50 && log.firstReset < 70, `first reset at ${log.firstReset} minutes`);
+  assert.ok(log.quiet > 50);
+  for (const part of ["live:0", "live:1", "live:2", "live:3", "done:3"]) assert.ok(log.scored.has(part), `a heat was seen ${part}: ${[...log.scored]}`);
+  assert.ok(!log.scored.has("scheduled:1"), "nothing is scored before the heat starts");
+  assert.ok(log.boards > 100);
+  assert.ok(doc.comp.entries.length === 64);
+});
+
+test("games scores sit in a believable range for each measure", () => {
+  const rand = rng(12);
+  let doc = buildDemo("fitness-games", NOW).doc;
+  for (let t = NOW; t < NOW + minutes(56); t += 20000) { const r = runStep(doc, t, rand); if (r.reset) break; doc = r.doc; }
+  const range = (k, size) => { const v = doc.comp.entries.filter((n) => n.results[k] != null && doc.comp.categories.find((c) => c.id === n.category).size === size).map((n) => n.results[k]); return [Math.min(...v), Math.max(...v), v.length]; };
+  const [kgLo, kgHi, kgN] = range(0, 1), [pkgLo, pkgHi] = range(0, 2), [tLo, tHi] = range(1, 1), [rLo, rHi] = range(2, 1);
+  assert.ok(kgN >= 30 && kgLo >= 60 && kgHi <= 140, `kg ${kgLo} to ${kgHi}`);
+  assert.ok(pkgLo > kgLo && pkgHi > kgHi, "pairs lift more between them");
+  assert.ok(tLo >= 300 && tHi <= 560, `time ${tLo} to ${tHi}`);
+  assert.ok(rLo >= 50 && rHi <= 130, `reps ${rLo} to ${rHi}`);
+  assert.ok(doc.comp.entries.every((n) => n.results.every((v) => v == null || Number.isInteger(v))));
+});
+
+test("fitness demo times follow London now: the heat starting is timed at this minute, those to come run forward at the gap", () => {
+  for (const [slug, gap] of [["fitness-race", 4], ["fitness-games", 6]]) {
+    const rand = rng(31);
+    let doc = buildDemo(slug, NOW).doc;
+    let ticks = 0, timing = 0;
+    for (let t = NOW; t < NOW + minutes(50); t += 20000) {
+      ticks++;
+      const step = simStep(doc, t, rng(t));
+      if (step.batches.some((b) => b.ops.some((o) => o.op === "heat.edit"))) timing++;
+      const r = runStep(doc, t, rand);
+      if (r.reset) break;
+      doc = r.doc;
+      const scheduled = doc.comp.heats.filter((h) => h.state === "scheduled");
+      scheduled.forEach((h) => assert.ok(deltaMins(h.time, t) >= 0, `${slug} ${h.name} to come is timed ${h.time}, ${-deltaMins(h.time, t)} minutes ago`));
+      scheduled.slice(1).forEach((h, i) => assert.equal((deltaMins(h.time, t) - deltaMins(scheduled[i].time, t) + 1440) % 1440, gap, `${slug} heats to come are ${gap} minutes apart`));
+      doc.comp.heats.filter((h) => h.state === "live").forEach((h) => { const d = deltaMins(h.time, t); assert.ok(d <= 0 && d >= -26, `${slug} live ${h.name} timed ${h.time}, ${-d} minutes from now`); });
+      doc.comp.heats.filter((h) => h.state === "done").forEach((h) => assert.equal(h.time, londonParts(h.startedAt).hhmm, "a heat that has started keeps the minute it started"));
+    }
+    assert.ok(timing < ticks / 3, `${slug} re-timed on ${timing} of ${ticks} ticks`);
+  }
+});
+
+test("the fitness simulation is pure, and every change uses the right actor", () => {
+  let doc = buildDemo("fitness-race", NOW).doc;
+  const before = JSON.stringify(doc);
+  const a = simStep(doc, NOW, rng(9));
+  assert.equal(JSON.stringify(doc), before, "the document is not touched");
+  assert.deepEqual(a, simStep(doc, NOW, rng(9)), "the same randomness gives the same step");
+  const rand = rng(3);
+  const seen = new Set();
+  for (let t = NOW; t < NOW + minutes(40); t += 20000) {
+    const s = simStep(doc, t, rand);
+    s.batches.forEach((b) => b.ops.forEach((o) => {
+      seen.add(o.op);
+      if (["heat.edit"].includes(o.op)) assert.deepEqual(b.actor, { role: "admin", id: null });
+      else { assert.equal(b.actor.role, "referee"); assert.ok(doc.officials.some((x) => x.id === b.actor.id && x.role === "referee")); }
+    }));
+    doc = runStep(doc, t, rand).doc;
+  }
+  for (const op of ["heat.start", "heat.end", "result.set", "heat.edit"]) assert.ok(seen.has(op), op);
+});
+
+test("the fitness simulation resets about five minutes after the last heat, and after a long stall", () => {
+  let doc = buildDemo("fitness-games", NOW).doc;
+  doc.comp.heats.forEach((h) => { h.state = "done"; h.startedAt = NOW - 600000; h.endedAt = NOW - 300000; });
+  doc.comp.entries.forEach((n) => { n.state = "finished"; n.results = [100, 300, 90]; });
+  const s1 = simStep(doc, NOW, rng(1));
+  assert.ok(!s1.reset && s1.sim.resetAt >= NOW + minutes(5) && s1.sim.resetAt <= NOW + minutes(5.6));
+  doc = { ...doc, private: { sim: s1.sim } };
+  assert.ok(!simStep(doc, NOW + minutes(4.9), rng(1)).reset);
+  assert.ok(simStep(doc, NOW + minutes(5.7), rng(1)).reset);
+  const stalled = { ...buildDemo("fitness-race", NOW).doc, private: { sim: { v: 1, progressAt: NOW, resetAt: null } } };
+  assert.ok(simStep(stalled, NOW + minutes(11), rng(1)).reset);
+});
+
+test("the fitness simulation copes with an organiser's edits mid-run", () => {
+  const rand = rng(5);
+  let doc = buildDemo("fitness-race", NOW).doc;
+  const admin = { role: "admin", id: null };
+  for (let t = NOW; t < NOW + minutes(30); t += 20000) {
+    if (t === NOW + minutes(10)) {
+      // the organiser starts a wave by hand, drops an athlete and adds one
+      const next = doc.comp.heats.find((h) => h.state === "scheduled");
+      const edit = applyOps(doc, [{ op: "heat.start", id: next.id }, { op: "entry.add", name: "Late Entrant", category: next.category, heat: next.id }, { op: "entry.remove", id: doc.comp.entries.find((n) => n.heat === next.id).id }], admin, t);
+      assert.equal(edit.ok, true, JSON.stringify(edit));
+      doc = edit.doc;
+    }
+    const r = runStep(doc, t, rand);
+    assert.deepEqual(r.errors, [], `at ${(t - NOW) / 60000} min`);
+    if (r.reset) break;
+    assert.deepEqual(validate(r.doc), []);
+    doc = r.doc;
+  }
+  assert.ok(doc.comp.heats.filter((h) => h.state !== "scheduled").length >= 7);
 });
 
 test("a two-ring juniors card runs a bout in each ring at once, with no fan votes", () => {

@@ -2,7 +2,7 @@
 // never real people, clubs or leagues. A seed is built with the real generator, so the document
 // always passes validate().
 
-import { blankEvent, validate } from "../../public/core/model.js";
+import { blankEvent, validate, toMins, fromMins, RANKINGS, MEASURES, ENTRY_SIZES } from "../../public/core/model.js";
 import { generate } from "../../public/core/generator.js";
 import { londonParts } from "../util.js";
 import { addMins } from "../../public/core/model.js";
@@ -96,6 +96,55 @@ export function footballDoc(o) {
   return { doc, rand, generated: last };
 }
 
+// A fitness event: segments, categories, heats (waves) and entries, all invented. Returns { doc, rand }.
+// o.segments are names or { name, measure }; o.categories are names or { name, size }. A timed race
+// only has time segments, so for ranking "time" every measure is time.
+const FITNESS_CLUBS = ["Northgate Fitness", "Riverside Run Club", "Hilltop Athletics", "Eastgate Training", "Millbank Fitness", "Harbour Strength", "Kingsway Conditioning", "Redbridge Runners"];
+export function fitnessDoc(o) {
+  const rand = rng(o.seed);
+  const namer = personNamer(rand);
+  const doc = blankEvent({ slug: o.slug, name: o.name, sport: "fitness", date: o.date });
+  doc.venue = o.venue;
+  doc.about = o.about;
+  doc.phase = o.phase || "live";
+  doc.theme.accent = o.accent;
+  doc.settings.voteBy = o.voteBy;
+  doc.settings.vote = { open: o.voteOpen !== false };
+  doc.settings.lockSecs = 60;
+  doc.settings.terms = { ...o.terms };
+  doc.officials = [1, 2].map((n) => ({ id: `R${n}`, name: namer(), role: "referee", pitch: null }));
+  const ranking = o.ranking;
+  doc.comp.ranking = ranking;
+  doc.comp.segments = o.segments.map((g, i) => {
+    const s = typeof g === "string" ? { name: g } : g;
+    return { id: `S${i + 1}`, name: String(s.name).trim(), measure: ranking === "time" ? "time" : s.measure || "time" };
+  });
+  doc.comp.categories = o.categories.map((k, i) => {
+    const c = typeof k === "string" ? { name: k } : k;
+    return { id: `C${i + 1}`, name: String(c.name).trim(), size: c.size || 1 };
+  });
+  const cats = doc.comp.categories;
+  const gap = o.gapMins;
+  const heatWord = o.heatWord || "Heat";
+  doc.comp.heats = Array.from({ length: o.heats }, (_, i) => ({
+    id: `H${i + 1}`, time: fromMins(toMins(o.start) + i * gap), name: `${heatWord} ${i + 1}`,
+    category: cats[i % cats.length].id, state: "scheduled", startedAt: null, endedAt: null,
+  }));
+  const clubs = o.clubs || FITNESS_CLUBS;
+  let k = 0;
+  doc.comp.entries = doc.comp.heats.flatMap((h) => {
+    const size = cats.find((c) => c.id === h.category).size;
+    return Array.from({ length: o.perHeat }, () => {
+      k++;
+      return {
+        id: `A${k}`, bib: o.bibStart + k - 1, name: Array.from({ length: size }, namer).join(" & "), club: pick(rand, clubs),
+        category: h.category, heat: h.id, results: doc.comp.segments.map(() => null), state: "ready",
+      };
+    });
+  });
+  return { doc, rand };
+}
+
 export function check(doc) {
   const errs = validate(doc);
   if (errs.length) throw new Error(`seed ${doc.slug} is invalid: ${errs.join("; ")}`);
@@ -110,6 +159,7 @@ export const withPrivate = (doc, seed) => { doc.private = { demo: { seed } }; re
 export const RECIPE_KEYS = {
   football: ["clubhouse", "name", "venue", "about", "teams", "divisions", "division", "format", "groups", "advance", "thirdPlace", "gameMins", "gapMins", "pitches", "voteBy", "terms", "squad", "juniors"],
   boxing: ["clubhouse", "name", "venue", "about", "bouts", "judges", "terms", "clubs", "rings", "juniors"],
+  fitness: ["clubhouse", "name", "venue", "about", "ranking", "segments", "categories", "heats", "perHeat", "gapMins", "terms"],
 };
 
 export function recipeOf(kind, r) {
@@ -133,6 +183,17 @@ export function recipeErrors(kind, r) {
     if (r.pitches !== undefined && !names(r.pitches, 1, 8, 40)) e.push("recipe.pitches: 1 to 8 names, 40 characters or fewer");
     if (r.juniors !== undefined && typeof r.juniors !== "boolean") e.push("recipe.juniors: true or false");
     if (r.squad !== undefined && !(Array.isArray(r.squad) && r.squad.length === 2 && r.squad.every(Number.isInteger) && r.squad[0] >= 1 && r.squad[0] <= r.squad[1] && r.squad[1] <= 20)) e.push("recipe.squad: [smallest, largest] squad, up to 20");
+  } else if (kind === "fitness") {
+    const named = (v, extra) => (typeof v === "string" ? v.trim() && v.length <= 40 : !!v && typeof v === "object" && typeof v.name === "string" && v.name.trim() && v.name.length <= 40 && extra(v));
+    const list = (v, max, extra) => Array.isArray(v) && v.length >= 1 && v.length <= max && v.every((x) => named(x, extra));
+    const whole = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
+    if (r.ranking !== undefined && !RANKINGS.includes(r.ranking)) e.push(`recipe.ranking: ${RANKINGS.join(" or ")}`);
+    if (r.segments !== undefined && !list(r.segments, 20, (x) => x.measure === undefined || MEASURES.includes(x.measure))) e.push(`recipe.segments: 1 to 20 segments with a name (40 characters or fewer) and a measure of ${MEASURES.join(", ")}`);
+    if (r.categories !== undefined && !list(r.categories, 16, (x) => x.size === undefined || ENTRY_SIZES.includes(x.size))) e.push(`recipe.categories: 1 to 16 categories with a name and a size of ${ENTRY_SIZES.join(", ")} athletes`);
+    if (r.heats !== undefined && !whole(r.heats, 1, 120)) e.push("recipe.heats: how many heats, 1 to 120");
+    if (r.perHeat !== undefined && !whole(r.perHeat, 1, 50)) e.push("recipe.perHeat: athletes in each heat, 1 to 50");
+    if (r.gapMins !== undefined && !whole(r.gapMins, 1, 30)) e.push("recipe.gapMins: minutes between heats, 1 to 30");
+    if (Number.isInteger(r.heats) && Number.isInteger(r.perHeat) && r.heats * r.perHeat > 800) e.push("recipe: an event holds up to 800 athletes (heats times athletes in each heat)");
   } else {
     if (r.bouts !== undefined && !(Array.isArray(r.bouts) && r.bouts.length >= 1 && r.bouts.length <= 20 && r.bouts.every((b) => b && typeof b === "object"))) e.push("recipe.bouts: 1 to 20 bouts");
     if (r.judges !== undefined && ![0, 1, 3, 5].includes(r.judges)) e.push("recipe.judges: 0, 1, 3 or 5");
@@ -148,7 +209,8 @@ export function codesFor(doc) {
   const place = (id) => (doc.pitches.find((p) => p.id === id) || {}).name;
   const out = [{ role: "admin", subject: null, label: "Organiser" }];
   doc.officials.forEach((o) => {
-    const label = o.role === "judge" ? `Judge ${o.id.replace(/^\D+/, "")}` : place(o.pitch) ? `Referee, ${place(o.pitch)}` : doc.sport === "boxing" ? "Referee and timekeeper" : "Referee";
+    const refs = doc.officials.filter((x) => x.role === "referee").length;
+    const label = o.role === "judge" ? `Judge ${o.id.replace(/^\D+/, "")}` : doc.sport === "fitness" ? (refs > 1 ? `Timekeeper, Floor ${o.id.replace(/^\D+/, "")}` : "Timekeeper") : place(o.pitch) ? `Referee, ${place(o.pitch)}` : doc.sport === "boxing" ? "Referee and timekeeper" : "Referee";
     out.push({ role: o.role, subject: o.id, label });
   });
   doc.divisions.flatMap((v) => v.teams).slice(0, 2).forEach((t) => out.push({ role: "coach", subject: t.id, label: `Coach, ${t.name}` }));

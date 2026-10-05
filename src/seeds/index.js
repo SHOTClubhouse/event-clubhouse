@@ -8,9 +8,11 @@ import beach from "./beach-soccer-cup.js";
 import futsal from "./futsal-finals.js";
 import sixes from "./sixes-league-night.js";
 import fight from "./fight-night.js";
+import fitnessRace from "./fitness-race.js";
+import fitnessGames from "./fitness-games.js";
 
-export const SEEDS = Object.fromEntries([beach, futsal, sixes, fight].map((s) => [s.slug, s]));
-export const SEED_ORDER = [beach.slug, futsal.slug, sixes.slug, fight.slug];
+export const SEEDS = Object.fromEntries([beach, futsal, sixes, fight, fitnessRace, fitnessGames].map((s) => [s.slug, s]));
+export const SEED_ORDER = [beach.slug, futsal.slug, sixes.slug, fight.slug, fitnessRace.slug, fitnessGames.slug];
 
 // A prospect or demo event from a seed. overrides: { slug, name, partner, accent, logo, teams,
 // recipe } where recipe is the prospect's own format (see recipeOf in lib.js).

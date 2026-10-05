@@ -6,6 +6,7 @@ import { tables, champion, winnerOf } from "/core/standings.js";
 import { currentBout, ringsNow, resultText, decision } from "/core/boxing.js";
 import { fmtDate, byTime, isJuniors, hasRings, ringName } from "/js/event-views.js";
 import { terms } from "/core/model.js";
+import { fitSlides } from "/js/fit-screen.js";
 
 const RECENT_MS = 3 * 60 * 1000;
 const score = (f) => (f.homeScore == null ? "v" : `${esc(f.homeScore)}<i>-</i>${esc(f.awayScore)}`);
@@ -144,6 +145,7 @@ function fansSlide(S) {
 export function buildSlides(S) {
   const ev = S.event, out = [];
   const add = (s) => { if (s) out.push(s); };
+  if (ev.sport === "fitness") return fitSlides(S);
   const votes = !isJuniors(ev); // a youth event has no fan voting, so no vote slide
   if (ev.sport === "boxing") {
     if (ev.phase === "post") add(helloSlide(S));

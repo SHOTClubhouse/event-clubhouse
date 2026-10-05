@@ -3,6 +3,7 @@
 
 import { esc, side, pitchName } from "/js/ui.js";
 import { leaderboard, splitBar, isFootball } from "/js/event-views.js";
+import { fitVote } from "/js/fit-fan.js";
 
 const read = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
 const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode: lasts the page */ } };
@@ -58,6 +59,7 @@ function roundVote(t, S) {
 export function voteView(S) {
   const v = S.votes, ev = S.event;
   const gate = !over13() ? `<section class="ece-card ece-gate" aria-labelledby="gate-h"><h2 id="gate-h" class="ece-h">Voting is for ages 13 and over</h2><p>Confirm once on this phone and you can vote all day.</p><button type="button" class="ec-btn ec-btn--big ec-btn--block" data-over13>I'm 13 or over</button></section>` : "";
+  if (ev.sport === "fitness") return fitVote(S, gate, over13());
   let body;
   if (!v) body = `<div class="ec-skel" style="height:140px;border-radius:14px"></div>`;
   else if (!ev.settings.vote.open && !(v.now && v.now.length)) body = `<div class="ece-empty"><b>Voting is closed</b><span>Here is how the fans voted.</span></div>`;

@@ -1,7 +1,7 @@
 // Coach dashboard: my team, my next game, my fixtures, my table, my squad, the fan link.
 // Opened as /coach/?e=<slug>. The squad editor keeps a draft on the phone until it is saved.
 
-import { ApiError, fullEvent, sendOps, session, sessionsFor, signOut, watchEvent } from "./api.js";
+import { api, ApiError, fullEvent, sendOps, session, sessionsFor, signOut, watchEvent } from "./api.js";
 import { $, applyTheme, esc, officialName, pitchName, plural, side, stageText, toast } from "./ui.js";
 import { tables, winnerOf } from "../core/standings.js";
 import { terms } from "../core/model.js";
@@ -207,7 +207,7 @@ function signInView() {
 }
 
 function render() {
-  if (S.pressing) { S.dirty = true; return; }
+  if (S.noCoach || S.pressing) { if (!S.noCoach) S.dirty = true; return; }
   S.dirty = false;
   const html = S.view === "signin" ? signInView() : eventView();
   if (html === S.lastHtml) return;
@@ -313,4 +313,12 @@ if (s0) {
   if (slug && session(slug)) S.signin.note = "That code is for a different job. Sign in with your coach code.";
   else if (slug) S.signin.note = "Type the code the organiser gave your team.";
   render();
+  if (slug) api.get(`/api/events/${encodeURIComponent(slug)}`).then((r) => { if (r && r.event && r.event.sport === "fitness") noCoachPages(r.event); }).catch(() => {});
+}
+
+// Fitness events have no coach codes, so say so instead of asking for one.
+function noCoachPages(ev) {
+  S.noCoach = true;
+  app.innerHTML = `<main id="main" class="ecr-main ec-narrow"><div class="ec-card ecr-state-card"><h1 class="ec-d3">This event has no coach pages</h1><p>${esc(ev.name)} is a fitness event. Athletes are followed by bib number on the event page, and timekeepers have their own page.</p><a class="ec-btn ec-btn--big ec-btn--block" href="/e/${encodeURIComponent(slug)}/">Open the event page</a><a class="ecr-link" href="/ref/?e=${encodeURIComponent(slug)}">I am a timekeeper</a></div></main>`;
+  document.title = `${ev.name} | SHOT Event Clubhouse`;
 }

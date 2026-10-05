@@ -9,7 +9,7 @@ const status = document.getElementById("status");
 const DEST = { admin: "/admin/", referee: "/ref/", judge: "/ref/", coach: "/coach/" };
 const ROLE_NAME = { admin: "Admin", referee: "Referee", judge: "Judge", coach: "Coach" };
 const PHASE = { pre: "Before", before: "Before", live: "Live now", post: "After", after: "After" };
-const SPORT = { football: "Football", boxing: "Boxing" };
+const SPORT = { football: "Football", boxing: "Boxing", fitness: "Fitness" };
 
 function el(tag, attrs = {}, ...kids) {
   const n = document.createElement(tag);

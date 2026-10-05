@@ -18,12 +18,15 @@ import { card } from "./admin-card.js";
 import { codes } from "./admin-codes.js";
 import { live } from "./admin-live.js";
 import { after } from "./admin-after.js";
+import { fitnessTabs } from "./admin-fitness.js";
 
 const app = document.getElementById("app");
 const slug = new URLSearchParams(location.search).get("e");
 const PHASE = { pre: "Before", live: "Live", post: "After" };
 
-const tabsFor = (sport, ev) => (sport === "boxing"
+// fitness keeps its own tabs; the clubhouse sits after Details for every sport
+const withClubhouse = (t) => { const i = t.findIndex((x) => x[0] === "details"); t.splice(i + 1, 0, ["clubhouse", "Clubhouse", clubhouse]); return t; };
+const tabsFor = (sport, ev) => (sport === "fitness" ? withClubhouse(fitnessTabs(ev)) : sport === "boxing"
   ? [["overview", "Overview", overview], ["details", "Details", details], ["clubhouse", "Clubhouse", clubhouse], ["card", "Fight card", card], ["officials", "Judges and referees", officials], ["codes", "Access codes", codes], ["live", "Live control", live], ["after", "After", after]]
   : [["overview", "Overview", overview], ["details", "Details", details], ["clubhouse", "Clubhouse", clubhouse], ["teams", "Teams", teams], ["officials", `${terms(ev).Places} and officials`, officials], ["fixtures", "Fixtures", fixtures], ["codes", "Access codes", codes], ["live", "Live control", live], ["after", "After", after]]);
 
