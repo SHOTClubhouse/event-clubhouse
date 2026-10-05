@@ -23,6 +23,7 @@ export function buildDemo(key, now, overrides = null) {
     if (overrides.accent) doc.theme.accent = overrides.accent;
     if (overrides.partner) doc.theme.partner = overrides.partner;
     if (overrides.logo) doc.theme.logo = overrides.logo;
+    if (overrides.logoData) doc.theme.logo = `/api/events/${doc.slug}/logo`;
     if (Array.isArray(overrides.teams)) doc.divisions.flatMap((v) => v.teams).forEach((t, i) => { if (overrides.teams[i]) t.name = String(overrides.teams[i]).trim(); });
     doc.private = { demo: { seed: key, overrides } };
   }

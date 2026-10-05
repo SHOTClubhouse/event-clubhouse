@@ -80,7 +80,9 @@ function check(doc) {
   if (!optText(d.about, 2000)) errs.push("about: 2000 characters or fewer");
   const th = d.theme || {};
   if (!COLOUR.test(th.accent || "")) errs.push("theme.accent: a #rrggbb colour");
-  if (!optUrl(th.logo)) errs.push("theme.logo: an https link");
+  // A logo is an https link, or the event's own logo address (a private demo's logo is kept on
+  // the server and served from there).
+  if (!(optUrl(th.logo) || (typeof th.logo === "string" && th.logo === `/api/events/${d.slug}/logo`))) errs.push("theme.logo: an https link");
   if (!optText(th.partner, 60)) errs.push("theme.partner: 60 characters or fewer");
   const ln = d.links || {};
   if (!optUrl(ln.tickets)) errs.push("links.tickets: an https link");
