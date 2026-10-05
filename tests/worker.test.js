@@ -485,3 +485,29 @@ test("recipe problems are reported in plain words", () => {
   assert.ok(recipeErrors("boxing", { judges: 2 }).length);
   assert.ok(recipeErrors("boxing", { bouts: [] }).length);
 });
+
+test("a two-ring juniors card runs a bout in each ring at once, with no fan votes", () => {
+  const start = Date.parse("2026-10-05T09:00:00Z");
+  const recipe = { name: "Junior Championships", rings: ["Ring A", "Ring B"], juniors: true, judges: 3, bouts: Array.from({ length: 6 }, (_, i) => ({ title: `Bout ${i + 1}`, rounds: 3, roundMins: 2 })) };
+  let { doc } = buildDemo("fight-night", start, { slug: "p-ringringri", name: "Junior Champs", accent: "#d02045", recipe });
+  assert.deepEqual(validate(doc), []);
+  assert.deepEqual(doc.card.bouts.map((b) => b.pitch), ["P1", "P2", "P1", "P2", "P1", "P2"]);
+  assert.deepEqual(codesFor(doc).filter((c) => c.role === "referee").map((c) => c.label), ["Referee, Ring A", "Referee, Ring B"]);
+  const rand = rng(77);
+  let both = false, votes = 0, errors = 0;
+  for (let t = start; t < start + 60 * 60000; t += 20000) {
+    const r = runStep(doc, t, rand);
+    if (r.reset) break;
+    errors += r.errors.length;
+    votes += r.votes.length;
+    doc = r.doc;
+    const live = doc.card.bouts.filter((b) => b.state === "live" || b.state === "break");
+    assert.ok(live.length <= 2);
+    assert.ok(new Set(live.map((b) => b.pitch)).size === live.length, "never two bouts at once in one ring");
+    if (live.length === 2) both = true;
+  }
+  assert.equal(errors, 0);
+  assert.ok(both, "both rings were busy at the same time");
+  assert.equal(votes, 0);
+  assert.ok(doc.card.bouts.filter((b) => b.state === "done").length >= 4);
+});

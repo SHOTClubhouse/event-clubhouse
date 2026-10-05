@@ -60,9 +60,10 @@ export function footballDoc(o) {
   doc.phase = o.phase;
   doc.theme.accent = o.accent;
   doc.settings.voteBy = o.voteBy;
-  doc.settings.vote = { open: !!o.voteOpen };
+  doc.settings.vote = { open: !!o.voteOpen && !o.juniors };
   doc.settings.lockSecs = 60;
   if (o.terms) doc.settings.terms = { ...o.terms };
+  if (o.juniors) { doc.settings.juniors = true; doc.settings.vote = { open: false }; }
   doc.pitches = o.pitches.map((name, i) => ({ id: `P${i + 1}`, name, stream: { url: null, on: false, label: "" } }));
   // one referee per pitch: the seed's own names first, invented ones for any extra pitches
   const refs = o.pitches.map((_, i) => (o.refs && o.refs[i]) || namer());
@@ -92,8 +93,8 @@ export const withPrivate = (doc, seed) => { doc.private = { demo: { seed } }; re
 // A recipe changes only the parts of a seed listed here (names, format, timings, wording), so
 // it can never change what a demo is. Each seed merges a recipe over its own defaults.
 export const RECIPE_KEYS = {
-  football: ["name", "venue", "about", "teams", "division", "format", "groups", "advance", "thirdPlace", "gameMins", "gapMins", "pitches", "voteBy", "terms", "squad"],
-  boxing: ["name", "venue", "about", "bouts", "judges", "terms", "clubs"],
+  football: ["name", "venue", "about", "teams", "division", "format", "groups", "advance", "thirdPlace", "gameMins", "gapMins", "pitches", "voteBy", "terms", "squad", "juniors"],
+  boxing: ["name", "venue", "about", "bouts", "judges", "terms", "clubs", "rings", "juniors"],
 };
 
 export function recipeOf(kind, r) {
@@ -114,11 +115,13 @@ export function recipeErrors(kind, r) {
   if (kind === "football") {
     if (r.teams !== undefined && !names(r.teams, 2, 32, 40)) e.push("recipe.teams: 2 to 32 team names, 40 characters or fewer");
     if (r.pitches !== undefined && !names(r.pitches, 1, 8, 40)) e.push("recipe.pitches: 1 to 8 names, 40 characters or fewer");
+    if (r.juniors !== undefined && typeof r.juniors !== "boolean") e.push("recipe.juniors: true or false");
     if (r.squad !== undefined && !(Array.isArray(r.squad) && r.squad.length === 2 && r.squad.every(Number.isInteger) && r.squad[0] >= 1 && r.squad[0] <= r.squad[1] && r.squad[1] <= 20)) e.push("recipe.squad: [smallest, largest] squad, up to 20");
   } else {
     if (r.bouts !== undefined && !(Array.isArray(r.bouts) && r.bouts.length >= 1 && r.bouts.length <= 20 && r.bouts.every((b) => b && typeof b === "object"))) e.push("recipe.bouts: 1 to 20 bouts");
     if (r.judges !== undefined && ![0, 1, 3, 5].includes(r.judges)) e.push("recipe.judges: 0, 1, 3 or 5");
     if (r.clubs !== undefined && !names(r.clubs, 2, 40, 40)) e.push("recipe.clubs: 2 to 40 club names");
+    if (r.rings !== undefined && !names(r.rings, 2, 6, 30)) e.push("recipe.rings: 2 to 6 ring names, 30 characters or fewer");
   }
   return e;
 }
@@ -129,7 +132,7 @@ export function codesFor(doc) {
   const place = (id) => (doc.pitches.find((p) => p.id === id) || {}).name;
   const out = [{ role: "admin", subject: null, label: "Organiser" }];
   doc.officials.forEach((o) => {
-    const label = o.role === "judge" ? `Judge ${o.id.replace(/^\D+/, "")}` : doc.sport === "boxing" ? "Referee and timekeeper" : place(o.pitch) ? `Referee, ${place(o.pitch)}` : "Referee";
+    const label = o.role === "judge" ? `Judge ${o.id.replace(/^\D+/, "")}` : place(o.pitch) ? `Referee, ${place(o.pitch)}` : doc.sport === "boxing" ? "Referee and timekeeper" : "Referee";
     out.push({ role: o.role, subject: o.id, label });
   });
   doc.divisions.flatMap((v) => v.teams).slice(0, 2).forEach((t) => out.push({ role: "coach", subject: t.id, label: `Coach, ${t.name}` }));

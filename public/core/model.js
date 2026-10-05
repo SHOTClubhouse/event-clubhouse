@@ -175,6 +175,7 @@ function check(doc) {
     if (!Array.isArray(b.judges) || b.judges.some((j) => !offIds.has(j))) errs.push(`${at}: judges must be officials`);
     ["red", "blue"].forEach((c) => { if (!b[c] || !text(b[c].name, 40) || !optText(b[c].club, 40)) errs.push(`${at}: ${c} corner needs a name`); });
     if (!BOUT_STATES.includes(b.state)) errs.push(`${at}: state one of ${BOUT_STATES.join(", ")}`);
+    if (b.pitch != null && !pitchIds.has(b.pitch)) errs.push(`${at}: unknown ring ${b.pitch}`);
     if (!Number.isInteger(b.round) || b.round < 0 || b.round > b.rounds) errs.push(`${at}: round 0 to ${b.rounds}`);
     if (b.result != null) {
       const r = b.result;

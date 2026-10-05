@@ -32,14 +32,17 @@ export default {
     doc.settings.terms = r.terms || { discipline: "White-collar boxing" };
     doc.phase = "live";
     doc.theme.accent = "#f7b613";
-    doc.settings.vote = { open: true };
+    doc.settings.vote = { open: !r.juniors };
     doc.settings.lockSecs = 60;
     const JUDGES = ["Dana Whitcombe", "Ravi Menon", "Helen Brightwell", "Marcus Oduya", "Lena Fairweather"];
     const judgeIds = Array.from({ length: r.judges ?? 3 }, (_, i) => `J${i + 1}`);
-    doc.officials = [
-      ...judgeIds.map((id, i) => ({ id, name: JUDGES[i], role: "judge", pitch: null })),
-      { id: "R1", name: "Sam Whitfield", role: "referee", pitch: null },
-    ];
+    // Rings: one referee each, and the bouts shared out in turn. Without rings, one referee.
+    const REFS = ["Sam Whitfield", "Joe Kirwan", "Ama Boateng", "Lewis Hart", "Nadia Price", "Owen Tate"];
+    doc.pitches = (r.rings || []).map((name, i) => ({ id: `P${i + 1}`, name, stream: { url: null, on: false, label: "" } }));
+    const refs = doc.pitches.length ? doc.pitches.map((p, i) => ({ id: `R${i + 1}`, name: REFS[i], role: "referee", pitch: p.id })) : [{ id: "R1", name: REFS[0], role: "referee", pitch: null }];
+    doc.officials = [...judgeIds.map((id, i) => ({ id, name: JUDGES[i], role: "judge", pitch: null })), ...refs];
+    if (doc.pitches.length) doc.settings.terms = { ...doc.settings.terms, place: "ring" };
+    if (r.juniors) { doc.settings.juniors = true; doc.settings.vote = { open: false }; }
     const clubPool = r.clubs || CLUBS;
     // The card: the recipe's bouts, or seven white-collar bouts with an exhibition and a main event.
     const plan = r.bouts || ["Opening bout", "Bout 2", "Exhibition", "Bout 4", "Bout 5", "Co-main event", "Main event"].map((title, i, all) => ({ title, rounds: i === all.length - 1 ? 5 : 3, roundMins: 2, scoring: title === "Exhibition" ? "none" : "judges" }));
@@ -52,6 +55,7 @@ export default {
         rounds: b.rounds || 3, roundMins: b.roundMins || 2, scoring: scored ? "judges" : "none", judges: scored ? judgeIds : [],
         red: { name: namer(), club: clubs[0] }, blue: { name: namer(), club: clubs[1] },
         state: "scheduled", round: 0, result: null,
+        ...(doc.pitches.length ? { pitch: doc.pitches[i % doc.pitches.length].id } : {}),
       };
     });
     return withPrivate(check(doc), slug);

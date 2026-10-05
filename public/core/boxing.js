@@ -95,7 +95,18 @@ export function nextState(bout, action, now) {
 }
 
 // The bout currently on (live or between rounds), else the next one scheduled.
-export function currentBout(card) {
-  const bouts = [...(card.bouts || [])].sort((a, b) => a.order - b.order);
+// The bout on now, or next up. With a ring id, only that ring's bouts (bouts with no ring count as
+// the first ring's when firstRing is given).
+export function currentBout(card, ring, firstRing) {
+  const inRing = (b) => ring === undefined || (b.pitch || firstRing || null) === ring;
+  const bouts = [...(card.bouts || [])].filter(inRing).sort((a, b) => a.order - b.order);
   return bouts.find((b) => b.state === "live" || b.state === "break") || bouts.find((b) => b.state === "scheduled") || null;
+}
+
+// One entry per ring that has bouts: { ring, bout } with the bout on now or next. A card without
+// rings (or with one) gives a single entry with ring null.
+export function ringsNow(doc) {
+  const rings = doc.pitches && doc.pitches.length > 1 ? doc.pitches.map((p) => p.id) : [null];
+  if (rings[0] === null) return [{ ring: null, bout: currentBout(doc.card) }];
+  return rings.map((r) => ({ ring: r, bout: currentBout(doc.card, r, rings[0]) })).filter((x) => x.bout);
 }
