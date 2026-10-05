@@ -8,7 +8,7 @@ import { buildSlides, goalHtml } from "/js/screen-slides.js";
 const slug = (location.pathname.match(/^\/e\/([^/]+)/) || [])[1] || "";
 const $ = (s) => document.querySelector(s);
 const ROTATE_MS = Number(new URLSearchParams(location.search).get("every")) * 1000 || 12000, GOAL_MS = 6500, SCALES = [1, 0.92, 0.84, 0.76, 0.68, 0.6, 0.52];
-const S = { event: null, votes: null, qr: "", fanUrl: `${location.origin}/e/${slug}/`, fanHost: `${location.host}/e/${slug}/`, seenFt: {}, lastOk: 0, key: null, slides: [] };
+const S = { event: null, votes: null, qr: "", qrClub: "", fanUrl: `${location.origin}/e/${slug}/`, fanHost: `${location.host}/e/${slug}/`, clubUrl: `${location.origin}/e/${slug}/#clubhouse`, seenFt: {}, lastOk: 0, key: null, slides: [] };
 let idx = 0, lastHtml = "", goalUntil = 0, goals = [], rotTimer = null;
 
 const rawGet = api.get;
@@ -20,7 +20,11 @@ function loadQr() {
   sc.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js";
   sc.integrity = "sha384-mZT2gIty7ZDdOGkxfP6joZcYdMW1Jvj9dRlfpTmaJAKKXTqzygtB22k7FLe+KZC1"; sc.crossOrigin = "anonymous";
   sc.onload = () => {
-    try { const q = window.qrcode(0, "M"); q.addData(S.fanUrl); q.make(); S.qr = q.createSvgTag({ scalable: true, margin: 0 }); lastHtml = ""; paintFooter(); refresh(true); } catch (e) { /* the URL text still shows */ }
+    try {
+      const q = window.qrcode(0, "M"); q.addData(S.fanUrl); q.make(); S.qr = q.createSvgTag({ scalable: true, margin: 0 });
+      const c = window.qrcode(0, "M"); c.addData(S.clubUrl); c.make(); S.qrClub = c.createSvgTag({ scalable: true, margin: 0 }); // the same page, opened on the Clubhouse tab
+      lastHtml = ""; paintFooter(); refresh(true);
+    } catch (e) { /* the URL text still shows */ }
   };
   document.head.appendChild(sc);
 }

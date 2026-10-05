@@ -10,6 +10,7 @@ import { h, btn, skeleton } from "./admin-lib.js";
 import { renderSignIn } from "./admin-signin.js";
 import { overview } from "./admin-overview.js";
 import { details } from "./admin-details.js";
+import { clubhouse } from "./admin-clubhouse.js";
 import { teams } from "./admin-teams.js";
 import { officials } from "./admin-officials.js";
 import { fixtures } from "./admin-fixtures.js";
@@ -23,8 +24,8 @@ const slug = new URLSearchParams(location.search).get("e");
 const PHASE = { pre: "Before", live: "Live", post: "After" };
 
 const tabsFor = (sport, ev) => (sport === "boxing"
-  ? [["overview", "Overview", overview], ["details", "Details", details], ["card", "Fight card", card], ["officials", "Judges and referees", officials], ["codes", "Access codes", codes], ["live", "Live control", live], ["after", "After", after]]
-  : [["overview", "Overview", overview], ["details", "Details", details], ["teams", "Teams", teams], ["officials", `${terms(ev).Places} and officials`, officials], ["fixtures", "Fixtures", fixtures], ["codes", "Access codes", codes], ["live", "Live control", live], ["after", "After", after]]);
+  ? [["overview", "Overview", overview], ["details", "Details", details], ["clubhouse", "Clubhouse", clubhouse], ["card", "Fight card", card], ["officials", "Judges and referees", officials], ["codes", "Access codes", codes], ["live", "Live control", live], ["after", "After", after]]
+  : [["overview", "Overview", overview], ["details", "Details", details], ["clubhouse", "Clubhouse", clubhouse], ["teams", "Teams", teams], ["officials", `${terms(ev).Places} and officials`, officials], ["fixtures", "Fixtures", fixtures], ["codes", "Access codes", codes], ["live", "Live control", live], ["after", "After", after]]);
 
 function boot() {
   if (!slug) return renderSignIn(app, {});

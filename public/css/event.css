@@ -266,3 +266,57 @@
 @media (min-width: 900px) {
   .ece-game--big .ece-sc { font-size: 3.4rem; }
 }
+
+/* Clubhouse tab (docs/CLUBHOUSE.md). Solid colours only. */
+.ece-chhead { padding-top: 22px; }
+.ece-chhead .ece-about { margin-bottom: 0; }
+.ece-mcard { position: relative; display: grid; gap: 6px; padding: 18px 18px 16px; background: var(--panel-2); border: 1px solid var(--line); border-top: 6px solid var(--accent); border-radius: var(--r); max-width: 440px; outline-offset: 3px; }
+.ece-mcard.is-empty { border-style: dashed; border-top-style: solid; background: var(--ece-card); }
+.ece-mcard__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; }
+.ece-mcard__logo { height: 40px; width: auto; max-width: 140px; object-fit: contain; }
+.ece-mcard__brand { font-weight: 800; font-size: 0.78rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); overflow-wrap: anywhere; }
+.ece-mcard__tag { flex: none; padding: 3px 10px; border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); font-size: 0.66rem; font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase; }
+.ece-mcard__name { margin: 8px 0 0; font-family: var(--display); font-size: clamp(2rem, 9vw, 2.8rem); line-height: 1; text-transform: uppercase; overflow-wrap: anywhere; }
+.ece-mcard.is-empty .ece-mcard__name { color: var(--ece-dim); font-size: 1.6rem; }
+.ece-mcard__since, .ece-mcard__ev { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.ece-mcard__ev { font-weight: 700; color: var(--ece-dim); font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; }
+.ece-members { margin: 12px 0 0; color: var(--muted); }
+.ece-members b { font-family: var(--display); font-weight: 400; font-size: 1.6rem; color: var(--accent); margin-right: 4px; }
+.ece-joinbtn { margin-top: 14px; max-width: 440px; }
+.ece-ch .ece-reg { max-width: 560px; }
+.ece-lineup, .ece-drops, .ece-tiers, .ece-posts, .ece-next, .ece-patches { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ece-lineup li { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 52px; padding: 8px 14px; background: var(--ece-card); border: 1px solid var(--line-soft); border-radius: var(--r); }
+.ece-lineup__t { color: var(--accent); font-weight: 800; font-size: 0.82rem; letter-spacing: 0.06em; }
+.ece-lineup b { overflow-wrap: anywhere; }
+.ece-chipline { display: inline-block; padding: 2px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 0.66rem; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap; }
+.ece-spot { border-radius: 14px; overflow: hidden; background: var(--panel-2); min-height: 152px; }
+.ece-spot iframe { width: 100%; height: 352px; border: 0; }
+.ece-drops .ece-card, .ece-tiers .ece-card, .ece-posts .ece-card, .ece-next .ece-card { margin-top: 0; padding: 14px 16px; }
+.ece-drops .ece-h3 { margin-top: 0; color: var(--accent); }
+.ece-drops p, .ece-post__t { margin: 6px 0 0; color: var(--muted); }
+.ece-tier__n { font-family: var(--display); font-weight: 400; font-size: 1.5rem; text-transform: uppercase; margin: 0; line-height: 1; }
+.ece-tier__p { margin: 6px 0 10px; color: var(--gold); font-weight: 800; font-size: 0.9rem; }
+.ece-tier__b { margin: 0; padding-left: 20px; display: grid; gap: 4px; color: var(--muted); }
+.ece-post__m { margin: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.ece-post__ago { margin-left: auto; color: var(--ece-dim); font-size: 0.8rem; }
+.ece-next time { display: block; color: var(--accent); font-weight: 800; font-size: 0.82rem; letter-spacing: 0.04em; margin-bottom: 2px; }
+.ece-next b { display: block; }
+.ece-next span { color: var(--muted); font-size: 0.9rem; }
+.ece-patches { grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); }
+.ece-patch { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 12px; align-items: center; padding: 12px 14px; background: var(--ece-card); border: 1px solid var(--line-soft); border-radius: var(--r); }
+.ece-patch__art { display: grid; place-items: center; width: 52px; height: 56px; color: var(--ece-dim); }
+.ece-patch.is-on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--ece-card)); }
+.ece-patch.is-on .ece-patch__art { color: var(--accent); }
+.ece-patch__t { display: grid; gap: 2px; min-width: 0; }
+.ece-patch__t span { color: var(--muted); font-size: 0.88rem; }
+.ece-patch__t em { font-style: normal; font-size: 0.7rem; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ece-dim); }
+.ece-patch.is-on .ece-patch__t em { color: var(--accent); }
+.ece-chfoot { padding-top: 22px; }
+
+/* Youth events and rings */
+.ece-youth { margin: 12px 0 0; padding: 12px 16px; border: 1px solid var(--line); border-radius: var(--r); background: var(--ece-card); color: var(--muted); font-weight: 700; }
+.ece-rings { display: grid; gap: 12px; }
+.ece-ringname { margin: 0 0 4px; font-family: var(--display); font-weight: 400; font-size: 1.3rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent); }
+@media (min-width: 720px) {
+  .ece-rings { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
+}

@@ -3,8 +3,8 @@
 
 import { esc, side, pitchName } from "/js/ui.js";
 import { tables, champion, winnerOf } from "/core/standings.js";
-import { currentBout, resultText, decision } from "/core/boxing.js";
-import { fmtDate, byTime } from "/js/event-views.js";
+import { currentBout, ringsNow, resultText, decision } from "/core/boxing.js";
+import { fmtDate, byTime, isJuniors, hasRings, ringName } from "/js/event-views.js";
 import { terms } from "/core/model.js";
 
 const RECENT_MS = 3 * 60 * 1000;
@@ -62,7 +62,15 @@ function koSlides(S) {
   return out;
 }
 
-const qrBox = (S, label = "Scan to vote") => `<div class="ecv-qrbox"><div class="ecv-qr" role="img" aria-label="QR code for ${esc(S.fanUrl)}">${S.qr || ""}</div><b>${esc(label)}</b><small>${esc(S.fanHost)}</small></div>`;
+const qrBox = (S, label = "Scan to vote", o = {}) => `<div class="ecv-qrbox"><div class="ecv-qr" role="img" aria-label="QR code for ${esc(o.url || S.fanUrl)}">${o.qr || S.qr || ""}</div><b>${esc(label)}</b><small>${esc(o.host || S.fanHost)}</small></div>`;
+
+// The clubhouse: who it is for, what it gives, and a code that opens the Clubhouse tab.
+function clubSlide(S) {
+  const ev = S.event, ch = ev.clubhouse;
+  if (!ch || ch.on !== true) return null;
+  const rewards = (ch.rewards || []).filter((r) => !(r.how === "vote" && isJuniors(ev)));
+  return { key: "club", max: Math.max(1, Math.min(rewards.length, 6)), build: (n) => `<div class="ecv-slide ecv-club"><div><p class="ecv-kicker">Join the clubhouse</p><h2>${esc(ev.name)}</h2>${ch.intro ? `<p>${esc(ch.intro)}</p>` : ""}${rewards.length ? `<ul class="ecv-patches" aria-label="Patches to earn">${rewards.slice(0, n).map((r) => `<li class="ecv-patch"><i aria-hidden="true"></i><span><b>${esc(r.name)}</b>${r.text ? `<small>${esc(r.text)}</small>` : ""}</span></li>`).join("")}</ul>` : ""}</div>${qrBox(S, "Scan to join", { qr: S.qrClub, url: S.clubUrl, host: `${S.fanHost}#clubhouse` })}</div>` };
+}
 
 function voteSlide(S) {
   const ev = S.event, v = S.votes;
@@ -92,15 +100,30 @@ function helloSlide(S) {
 // ---- Boxing ----
 const fighter = (b, k, won) => `<div class="ecv-f ecv-f--${k}${won ? " is-won" : ""}"><small>${k === "red" ? "Red corner" : "Blue corner"}</small><b>${esc(b[k].name)}</b><span>${esc(b[k].club || "")}</span></div>`;
 
+// Two or more rings: the bout on in each ring, side by side.
+function ringsSlide(S, entries) {
+  const ev = S.event, votes = (S.votes && S.votes.rounds) || [];
+  return { key: "bout", max: 1, build: () => `<div class="ecv-slide ecv-rings" style="--c:${entries.length}">${entries.map(({ ring, bout: b }) => {
+    const live = b.state === "live" || b.state === "break";
+    const r = votes.find((x) => x.bout === b.id && x.round === b.round), t = r ? r.red + r.blue : 0, rp = t ? Math.round((r.red / t) * 100) : 50;
+    return `<section class="ecv-ring"><h2 class="ecv-ring__n">${esc(ringName(ev, { pitch: ring }))}</h2><div class="ecv-bout__top">${b.state === "live" ? `<span class="ecv-live">Live</span>` : b.state === "break" ? `<span class="ecv-brk">Break</span>` : `<span class="ecv-next">Up next</span>`}<span>Bout ${esc(b.order)}</span>${b.title ? `<b>${esc(b.title)}</b>` : ""}</div>
+      <p class="ecv-round">${live ? `Round <b>${esc(b.round)}</b> of ${esc(b.rounds)}` : `${esc(b.rounds)} rounds`}</p>
+      <div class="ecv-vs">${fighter(b, "red", false)}<span class="ecv-vs__v">v</span>${fighter(b, "blue", false)}</div>
+      ${live ? `<div class="ecv-fansplit"><div class="ecv-split"><span style="width:${rp}%"></span><em>${t ? rp + "%" : ""}</em><em>${t ? 100 - rp + "%" : ""}</em></div></div>` : ""}</section>`;
+  }).join("")}</div>` };
+}
+
 function boutSlide(S) {
   const ev = S.event, bouts = [...ev.card.bouts].sort((a, b) => a.order - b.order);
-  const b = currentBout(ev.card) || [...bouts].reverse().find((x) => x.state === "done");
+  const rn = hasRings(ev) ? ringsNow(ev) : [];
+  if (rn.length > 1) return ringsSlide(S, rn);
+  const b = (rn.length === 1 ? rn[0].bout : currentBout(ev.card)) || [...bouts].reverse().find((x) => x.state === "done");
   if (!b) return null;
   const live = b.state === "live" || b.state === "break";
   const r = ((S.votes && S.votes.rounds) || []).find((x) => x.bout === b.id && x.round === b.round);
   const t = r ? r.red + r.blue : 0, rp = t ? Math.round((r.red / t) * 100) : 50;
   const dec = b.state === "done" && b.scoring === "judges" && (ev.scorecards || {})[b.id] ? decision(b, ev.scorecards) : null;
-  return { key: "bout", max: 1, build: () => `<div class="ecv-slide ecv-bout"><div class="ecv-bout__top">${b.state === "live" ? `<span class="ecv-live">Live</span>` : b.state === "break" ? `<span class="ecv-brk">Break</span>` : b.state === "done" ? `<span class="ecv-ft">Result</span>` : `<span class="ecv-next">Up next</span>`}<span>Bout ${esc(b.order)} of ${bouts.length}</span>${b.title ? `<b>${esc(b.title)}</b>` : ""}${b.weight ? `<span>${esc(b.weight)}</span>` : ""}</div>
+  return { key: "bout", max: 1, build: () => `<div class="ecv-slide ecv-bout"><div class="ecv-bout__top">${b.state === "live" ? `<span class="ecv-live">Live</span>` : b.state === "break" ? `<span class="ecv-brk">Break</span>` : b.state === "done" ? `<span class="ecv-ft">Result</span>` : `<span class="ecv-next">Up next</span>`}${ringName(ev, b) ? `<b>${esc(ringName(ev, b))}</b>` : ""}<span>Bout ${esc(b.order)} of ${bouts.length}</span>${b.title ? `<b>${esc(b.title)}</b>` : ""}${b.weight ? `<span>${esc(b.weight)}</span>` : ""}</div>
     <p class="ecv-round">${live ? `Round <b>${esc(b.round)}</b> of ${esc(b.rounds)}` : b.state === "done" ? esc(resultText(b)) : `${esc(b.rounds)} rounds`}</p>
     <div class="ecv-vs">${fighter(b, "red", b.result && b.result.winner === "red")}<span class="ecv-vs__v">v</span>${fighter(b, "blue", b.result && b.result.winner === "blue")}</div>
     ${live ? `<div class="ecv-fansplit"><p>Fans, round ${esc(b.round)}</p><div class="ecv-split"><span style="width:${rp}%"></span><em>${t ? rp + "%" : "Vote now"}</em><em>${t ? 100 - rp + "%" : ""}</em></div></div>` : ""}
@@ -109,7 +132,7 @@ function boutSlide(S) {
 function cardSlide(S) {
   const ev = S.event, bouts = [...ev.card.bouts].sort((a, b) => a.order - b.order);
   if (!bouts.length) return null;
-  return { key: "card", max: bouts.length, build: (n) => `<div class="ecv-slide"><h2 class="ecv-title">Fight card</h2><div class="ecv-card">${bouts.slice(0, n).map((b) => `<div class="ecv-brow ecv-brow--${esc(b.state)}"><i>${esc(b.order)}</i><span class="red${b.result && b.result.winner === "red" ? " is-won" : ""}">${esc(b.red.name)}</span><em>v</em><span class="blue${b.result && b.result.winner === "blue" ? " is-won" : ""}">${esc(b.blue.name)}</span><small>${b.result ? esc(resultText(b)) : b.state === "live" || b.state === "break" ? `Round ${esc(b.round)}` : esc(b.title || "")}</small></div>`).join("")}</div></div>` };
+  return { key: "card", max: bouts.length, build: (n) => `<div class="ecv-slide"><h2 class="ecv-title">Fight card</h2><div class="ecv-card">${bouts.slice(0, n).map((b) => `<div class="ecv-brow ecv-brow--${esc(b.state)}"><i>${esc(b.order)}</i><span class="red${b.result && b.result.winner === "red" ? " is-won" : ""}">${esc(b.red.name)}</span><em>v</em><span class="blue${b.result && b.result.winner === "blue" ? " is-won" : ""}">${esc(b.blue.name)}</span><small>${[ringName(ev, b), b.result ? resultText(b) : b.state === "live" || b.state === "break" ? `Round ${b.round}` : b.title || ""].filter(Boolean).map(esc).join(" &middot; ")}</small></div>`).join("")}</div></div>` };
 }
 function fansSlide(S) {
   const v = S.votes, F = (v && v.fighters) || [];
@@ -121,18 +144,22 @@ function fansSlide(S) {
 export function buildSlides(S) {
   const ev = S.event, out = [];
   const add = (s) => { if (s) out.push(s); };
+  const votes = !isJuniors(ev); // a youth event has no fan voting, so no vote slide
   if (ev.sport === "boxing") {
     if (ev.phase === "post") add(helloSlide(S));
-    add(boutSlide(S)); add(cardSlide(S)); if (ev.phase !== "pre") add(fansSlide(S)); else add(helloSlide(S));
+    add(boutSlide(S)); add(cardSlide(S));
+    if (ev.phase !== "pre") { if (votes) add(fansSlide(S)); } else add(helloSlide(S));
+    add(clubSlide(S));
     return out;
   }
-  if (ev.phase === "pre") { add(helloSlide(S)); add(gamesSlide(S)); tableSlides(S).forEach(add); return out; }
-  if (ev.phase === "post") { add(helloSlide(S)); add(resultsSlide(S)); tableSlides(S).forEach(add); koSlides(S).forEach(add); add(voteSlide(S)); return out; }
+  if (ev.phase === "pre") { add(helloSlide(S)); add(gamesSlide(S)); tableSlides(S).forEach(add); add(clubSlide(S)); return out; }
+  if (ev.phase === "post") { add(helloSlide(S)); add(resultsSlide(S)); tableSlides(S).forEach(add); koSlides(S).forEach(add); if (votes) add(voteSlide(S)); add(clubSlide(S)); return out; }
   add(gamesSlide(S));
   tableSlides(S).forEach(add);
   koSlides(S).forEach(add);
-  add(voteSlide(S));
+  if (votes) add(voteSlide(S));
   if (!out.length) add(helloSlide(S));
+  add(clubSlide(S));
   return out;
 }
 

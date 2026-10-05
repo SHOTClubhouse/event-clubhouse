@@ -6,11 +6,12 @@ import { applyTheme, toast, esc, startVideos, streamHtml, side } from "/js/ui.js
 import { streamInfo } from "/core/model.js";
 import { resultText } from "/core/boxing.js";
 import { headerHtml, tabsFor, defaultTab, viewFor, skeleton } from "/js/event-views.js";
+import { clubhouseView, syncPatches, loadPatches } from "/js/event-clubhouse.js";
 import { voteView, over13, setOver13, loadMine, saveMine, loadFollow, saveFollow, loadReg, saveReg, lockText } from "/js/event-vote.js";
 
 const slug = (location.pathname.match(/^\/e\/([^/]+)/) || [])[1] || "";
 const $ = (s, r = document) => r.querySelector(s);
-const S = { event: null, votes: null, votesAt: 0, tab: null, filters: { pitch: "all", div: "all", mineOnly: false }, follow: loadFollow(slug), mine: loadMine(slug), reg: loadReg(slug), lockAt: {}, pendingReason: {}, lastOk: 0, fails: 0, err: null, posting: false, streamSel: 0, streamOn: false };
+const S = { event: null, votes: null, votesAt: 0, tab: null, filters: { pitch: "all", div: "all", mineOnly: false }, follow: loadFollow(slug), mine: loadMine(slug), reg: loadReg(slug), patches: loadPatches(slug), lockAt: {}, pendingReason: {}, lastOk: 0, fails: 0, err: null, posting: false, streamSel: 0, streamOn: false };
 const last = { head: "", nav: "", view: "", tab: "" };
 let watcher = null, votesTimer = null, announceTimer = null;
 
@@ -54,11 +55,12 @@ function render() {
   document.title = `${ev.name} | SHOT Event Clubhouse`;
   setHtml($("#head"), "head", headerHtml(ev));
   const { tabs, id } = activeTab(ev);
+  const unlocked = syncPatches(S, slug);
   const changed = S.tab !== id;
   S.tab = id;
   const open = S.votes && S.votes.now ? S.votes.now.length : 0;
   setHtml($("#nav"), "nav", tabs.map(([k, n]) => `<a class="ece-tab" href="#${k}"${k === id ? ' aria-current="page"' : ""}>${esc(n)}${k === "vote" && open ? `<span class="ece-dot" aria-hidden="true">${open}</span><span class="ece-sr"> open now</span>` : ""}</a>`).join(""));
-  const html = id === "vote" ? voteView(S) : viewFor(id, S);
+  const html = id === "vote" ? voteView(S) : id === "clubhouse" ? clubhouseView(S) : viewFor(id, S);
   const key = id + "|" + html;
   const focusKey = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.k : null;
   const snap = snapshotForms();
@@ -76,6 +78,8 @@ function render() {
   syncStream();
   tickLocks();
   paintStatus();
+  // A small, polite toast once per patch, a moment after any other message.
+  unlocked.forEach((r, i) => setTimeout(() => toast(`Patch unlocked: ${r.name}`, "ok", 3200), 1500 + i * 3400));
 }
 
 function errorHtml(e) {
@@ -290,10 +294,10 @@ async function register(form) {
   btn.disabled = true; btn.textContent = "Sending...";
   try {
     const r = await api.post(`/api/events/${slug}/register`, { firstName: name, email, over13: true, consent: true, website: String(v.get("website") || "") });
-    S.reg = { state: r.demo ? "demo" : "ok" };
+    S.reg = { state: r.demo ? "demo" : "ok", name, at: Date.now() }; // the name stays on this device
     saveReg(slug, S.reg);
     render();
-    const h = $("#view .ece-reg--done h2"); if (h) { h.setAttribute("tabindex", "-1"); h.focus(); }
+    const h = $("#view .ece-reg--done h2") || $("#view [data-member-card]"); if (h) { h.setAttribute("tabindex", "-1"); h.focus(); }
   } catch (e) {
     btn.disabled = false; btn.textContent = "Register";
     err.textContent = e.message; err.hidden = false;

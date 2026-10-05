@@ -32,7 +32,7 @@ const api = async (method, path, body, headers = {}) => {
 };
 const adminToken = async (code) => `Bearer ${(await api("POST", "/api/auth", { code })).data.token}`;
 
-const browser = await chromium.launch();
+const browser = await chromium.launch(process.env.PW_CHANNEL ? { channel: process.env.PW_CHANNEL } : {});
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
 const page = await ctx.newPage();
 const consoleErrors = [];
@@ -55,8 +55,8 @@ const toast = async (text) => {
   await page.waitForFunction(() => !document.querySelector('#main[aria-busy="true"]'), null, { timeout: 8000 }); // the save has been drawn
 };
 const SECTIONS = {
-  football: ["Overview", "Details", "Teams", "Pitches and officials", "Fixtures", "Access codes", "Live control", "After"],
-  boxing: ["Overview", "Details", "Fight card", "Judges and referees", "Access codes", "Live control", "After"],
+  football: ["Overview", "Details", "Clubhouse", "Teams", "Pitches and officials", "Fixtures", "Access codes", "Live control", "After"],
+  boxing: ["Overview", "Details", "Clubhouse", "Fight card", "Judges and referees", "Access codes", "Live control", "After"],
 };
 const slugOf = () => new URL(page.url()).searchParams.get("e");
 async function sweep(prefix, sport) {
@@ -331,6 +331,48 @@ await step("mobile 390x844: every football section fits, with the menu", async (
   await shot("m-football-fixtures-generator");
 });
 
+await step("clubhouse: a refused save keeps what was typed, then the editor saves on this event and fans see it", async () => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${base}/admin/?e=${football}#overview`);
+  await page.waitForSelector("#panel-title");
+  await tab("Clubhouse");
+  await page.getByLabel("Show the Clubhouse tab to fans").check();
+  await page.getByLabel("Intro", { exact: true }).fill("The cup is one day. The clubhouse is all year.");
+  await page.getByRole("button", { name: "Add tier" }).click();
+  const tier = page.getByRole("group", { name: "tier 1" });
+  await tier.getByLabel("Benefits, one per line").fill("Early access to tickets\nYour member card");
+  await page.getByRole("button", { name: "Save clubhouse" }).click();
+  await page.locator("#ch-msg:not([hidden])").waitFor({ timeout: 8000 });
+  assert.match(await page.locator("#ch-msg").innerText(), /name 1 to 60 characters/);
+  assert.equal(await page.getByLabel("Intro", { exact: true }).inputValue(), "The cup is one day. The clubhouse is all year.", "the typing survives a refused save");
+  await page.getByRole("group", { name: "tier 1" }).getByLabel("Name").fill("Member");
+  await page.getByLabel("Spotify link").fill("https://example.com/nope");
+  assert.match(await page.locator("#ch-plcheck").innerText(), /not a Spotify link/);
+  await page.getByLabel("Spotify link").fill("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M");
+  assert.equal((await page.locator("#ch-plcheck").innerText()).trim(), "Spotify playlist. Fans play it inside the Clubhouse tab");
+  await page.getByRole("button", { name: "Add line-up row" }).click();
+  await page.getByRole("group", { name: "line-up row 1" }).getByLabel("Name").fill("DJ Test");
+  await page.getByRole("button", { name: "Add date" }).click();
+  await page.getByRole("group", { name: "date 1" }).getByLabel("Date", { exact: true }).fill("2026-12-12");
+  await page.getByRole("group", { name: "date 1" }).getByLabel("Title").fill("The winter cup");
+  await page.getByRole("button", { name: "Add patch" }).click();
+  await page.getByRole("group", { name: "patch 1" }).getByLabel("Name").fill("Founding fan");
+  await shot("clubhouse-editor-desktop");
+  await noOverflow("clubhouse editor");
+  await page.getByRole("button", { name: "Save clubhouse" }).click();
+  await toast("Clubhouse saved");
+  const pub = (await api("GET", `/api/events/${football}`)).data.event;
+  assert.equal(pub.clubhouse.on, true);
+  assert.equal(pub.clubhouse.tiers[0].price, null, "no price means Price set by you");
+  assert.equal(pub.clubhouse.culture.playlist, "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M");
+  assert.equal(pub.clubhouse.rewards[0].name, "Founding fan");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await page.waitForSelector("#panel-title");
+  await noOverflow("clubhouse editor at 390");
+  await shot("clubhouse-editor-mobile");
+});
+
 await step("boxing: create an event, add judges, build a 3-bout card, run a round", async () => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`${base}/admin/`);
@@ -405,6 +447,19 @@ await step("demo: sign in to the beach soccer cup and see live games from the si
   assert.match(await page.locator(".ecx-notice").first().innerText(), /can't be revoked/);
   await tab("After");
   assert.ok(await page.getByRole("button", { name: "Reset demo" }).isVisible());
+});
+
+await step("demo: the clubhouse cannot be changed on a listed demo, and the message says so", async () => {
+  await tab("Clubhouse");
+  assert.match(await page.locator(".ecx-notice").first().innerText(), /demo/i);
+  await page.getByLabel("Intro", { exact: true }).fill("Changed in the public demo");
+  await page.getByRole("button", { name: "Save clubhouse" }).click();
+  await page.locator("#ch-msg:not([hidden])").waitFor({ timeout: 8000 });
+  assert.match(await page.locator("#ch-msg").innerText(), /In the demo, the clubhouse, links, video and logos stay as they are/);
+  assert.equal(await page.getByLabel("Intro", { exact: true }).inputValue(), "Changed in the public demo", "the typing is still there");
+  const pub = (await api("GET", "/api/events/beach-soccer-cup")).data.event;
+  assert.notEqual(pub.clubhouse.intro, "Changed in the public demo", "nothing was saved");
+  await shot("clubhouse-demo-refused");
 });
 
 await step("sign out returns to sign-in and drops the session", async () => {

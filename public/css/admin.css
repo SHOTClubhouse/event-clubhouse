@@ -281,3 +281,12 @@
 .ecx-dialog__actions { justify-content: flex-end; }
 
 @media (max-width: 420px) { .ecx-switch__text { font-size: 1.2rem; } }
+
+/* Clubhouse editor: rows of fields with Add and Remove */
+.ecx-clrows { display: grid; gap: 12px; }
+.ecx-clrows:empty { display: none; }
+.ecx-clrow { display: grid; gap: 12px; padding: 14px; background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: var(--r-sm); }
+.ecx-clrow__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ecx-clrow__t { margin: 0; font-size: 0.78rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.ecx-sub { margin: 8px 0 0; font-size: 0.78rem; font-weight: 900; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
+.ecx-plcheck.ecx-ok { color: var(--teal); }

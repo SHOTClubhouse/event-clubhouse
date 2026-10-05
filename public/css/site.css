@@ -234,3 +234,6 @@
 .ecs-h3 { margin-bottom: 22px; }
 [hidden] { display: none !important; }
 section[id] { scroll-margin-top: 72px; }
+
+/* The clubhouse story: links inside the three cards */
+#clubhouse .ecs-card .btn { width: auto; margin-top: 4px; }

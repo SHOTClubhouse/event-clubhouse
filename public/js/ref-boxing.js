@@ -1,9 +1,14 @@
 // Boxing: the referee / timekeeper view (bout controls, round clock, result) and the judge view
 // (score each round once it has ended). Rendering only; taps go through c.send() or c.sendNow().
 
-import { esc, plural } from "./ui.js";
+import { esc, plural, pitchName } from "./ui.js";
 import { METHODS, firstName } from "../core/model.js";
 import { currentBout, judgeCard, resultText } from "../core/boxing.js";
+
+// Rings: with more than one, a bout belongs to its ring (none means the first).
+const hasRings = (event) => (event.pitches || []).length > 1;
+const boutRing = (event, b) => (hasRings(event) ? b.pitch || event.pitches[0].id : null);
+const ringLabel = (event, b) => (hasRings(event) ? pitchName(event, boutRing(event, b)) : "");
 
 const METHOD_NAME = { PTS: "Points", KO: "KO", TKO: "TKO", RSC: "RSC", RTD: "RTD", DQ: "DQ", DRAW: "Draw", NC: "No contest" };
 const STOPPAGES = ["KO", "TKO", "RSC", "RTD", "DQ"];
@@ -69,11 +74,11 @@ function stateText(b) {
   return "Not started";
 }
 
-function boutHead(b, picked, always = false) {
+function boutHead(b, picked, always = false, ring = "") {
   const running = !always && (b.state === "live" || b.state === "break");
   const bits = [b.weight, plural(b.rounds, "round") + " of " + b.roundMins + " min"].filter(Boolean);
   return `<section class="ec-card ecr-bout" aria-label="Current bout">
-    <p class="ecr-bout__top"><span class="ecr-time">Bout ${b.order}</span>${b.title ? `<span class="ecr-meta">${esc(b.title)}</span>` : ""}<span class="ec-badge ${b.state === "live" ? "ec-badge--live" : ""}">${b.state === "break" ? "Break" : b.state === "done" ? "Done" : b.state === "live" ? "Live" : "Not started"}</span></p>
+    <p class="ecr-bout__top"><span class="ecr-time">Bout ${b.order}</span>${ring ? `<span class="ecr-ring">${esc(ring)}</span>` : ""}${b.title ? `<span class="ecr-meta">${esc(b.title)}</span>` : ""}<span class="ec-badge ${b.state === "live" ? "ec-badge--live" : ""}">${b.state === "break" ? "Break" : b.state === "done" ? "Done" : b.state === "live" ? "Live" : "Not started"}</span></p>
     <div class="ecr-corners">${corner(b, "red")}${corner(b, "blue")}</div>
     <p class="ecr-bout__info">${esc(bits.join(" · "))}</p>
     ${running ? "" : `<p class="ecr-bout__state" aria-live="polite">${esc(stateText(b))}</p>`}
@@ -157,24 +162,31 @@ function resultSheet(c, b) {
   </section>`;
 }
 
-function cardList(c, cur) {
-  const list = sorted(c.event);
-  return `<section class="ecr-sec" aria-label="The card"><h2 class="ecr-h">The card <span class="ec-dim">${list.length}</span></h2>
-    <ul class="ecr-card-list">${list.map((b) => `<li><button type="button" class="ec-card ecr-row${b.id === cur.id ? " is-picked" : ""}" data-act="pick-bout" data-id="${esc(b.id)}" data-f="pb:${esc(b.id)}" aria-pressed="${b.id === cur.id}">
+function cardList(c, cur, list, o = {}) {
+  const { event } = c;
+  const row = (b) => `<li><button type="button" class="ec-card ecr-row${b.id === cur.id ? " is-picked" : ""}" data-act="pick-bout" data-id="${esc(b.id)}" data-f="pb:${esc(b.id)}" aria-pressed="${b.id === cur.id}">
       <span class="ecr-row__n">${b.order}</span>
-      <span class="ecr-row__who"><span class="ecr-row__names"><span class="ecr-dot ecr-dot--red" aria-hidden="true"></span>${esc(b.red.name)} <span class="ec-dim">v</span> <span class="ecr-dot ecr-dot--blue" aria-hidden="true"></span>${esc(b.blue.name)}</span><span class="ec-dim ec-small">${esc(stateText(b))}</span></span>
-    </button></li>`).join("")}</ul></section>`;
+      <span class="ecr-row__who"><span class="ecr-row__names"><span class="ecr-dot ecr-dot--red" aria-hidden="true"></span>${esc(b.red.name)} <span class="ec-dim">v</span> <span class="ecr-dot ecr-dot--blue" aria-hidden="true"></span>${esc(b.blue.name)}</span><span class="ec-dim ec-small">${esc([ringLabel(event, b), stateText(b)].filter(Boolean).join(" · "))}</span></span>
+    </button></li>`;
+  const filter = o.mine ? `<button type="button" class="ec-btn ec-btn--ghost ecr-ringfilter" data-act="ring-all" data-f="ringall" aria-pressed="${!!c.ui.allRings}">${c.ui.allRings ? `Show only ${esc(o.mineName)}` : "Show every ring"}</button>` : "";
+  return `<section class="ecr-sec" aria-label="The card"><h2 class="ecr-h">The card${o.mine && !c.ui.allRings ? `, ${esc(o.mineName)}` : ""} <span class="ec-dim">${list.length}</span></h2>${filter}
+    <ul class="ecr-card-list">${list.map(row).join("")}</ul></section>`;
 }
 
 export function renderReferee(c) {
   const { event, ui } = c;
-  const bouts = sorted(event);
-  if (!bouts.length) return '<div class="ec-empty">No bouts on the card yet. This page fills in by itself.</div>';
-  const live = currentBout(event.card);
-  const cur = (ui.bout && bouts.find((b) => b.id === ui.bout)) || live || bouts[bouts.length - 1];
+  const all = sorted(event);
+  if (!all.length) return '<div class="ec-empty">No bouts on the card yet. This page fills in by itself.</div>';
+  // With rings, a referee sees their own ring first. The other rings are one tap away.
+  const mine = hasRings(event) && c.me.pitch && event.pitches.some((p) => p.id === c.me.pitch) ? c.me.pitch : null;
+  const bouts = mine && !ui.allRings ? all.filter((b) => boutRing(event, b) === mine) : all;
+  const first = hasRings(event) ? event.pitches[0].id : undefined;
+  const live = mine ? currentBout(event.card, mine, first) : currentBout(event.card);
+  const shown = bouts.length ? bouts : all;
+  const cur = (ui.bout && all.find((b) => b.id === ui.bout)) || live || shown[shown.length - 1];
   const picked = !!live && cur.id !== live.id;
-  const doneAll = !live && bouts.every((b) => b.state === "done");
-  return `${doneAll ? '<div class="ec-empty">Every bout on the card is done. Thank you.</div>' : ""}${boutHead(cur, picked)}${clockHtml(cur)}${waitingLine(c, cur)}${controls(c, cur)}${resultSheet(c, cur)}${cardList(c, cur)}`;
+  const doneAll = !live && shown.every((b) => b.state === "done");
+  return `${doneAll ? '<div class="ec-empty">Every bout on the card is done. Thank you.</div>' : ""}${boutHead(cur, picked, false, ringLabel(event, cur))}${clockHtml(cur)}${waitingLine(c, cur)}${controls(c, cur)}${resultSheet(c, cur)}${cardList(c, cur, shown, { mine: !!mine, mineName: mine ? pitchName(event, mine) : "" })}`;
 }
 
 // ---- Referee actions ----
@@ -183,6 +195,7 @@ export async function actReferee(c, name, el) {
   const id = el.dataset.id;
   const b = id ? (event.card.bouts || []).find((x) => x.id === id) : null;
   if (name === "pick-bout") { ui.bout = id; ui.result = null; return c.rerender(); }
+  if (name === "ring-all") { ui.allRings = !ui.allRings; return c.rerender(); }
   if (name === "clock-restart") { const t = (event.card.bouts || []).find((x) => x.id === ui.bout) || currentBout(event.card); if (t) clockStart(c.slug, t.id, t.round); return c.rerender(); }
   if (name === "bout-start" && b) { clockStart(c.slug, b.id, 1); ui.bout = b.id; return c.send([{ op: "bout.action", id, action: "start" }], { haptic: 20, say: `Bout ${b.order} started` }); }
   if (name === "bout-end" && b) {
@@ -263,7 +276,7 @@ export function renderJudge(c) {
   const others = mine.length > 1
     ? `<section class="ecr-sec" aria-label="My bouts"><h2 class="ecr-h">My bouts <span class="ec-dim">${mine.length}</span></h2><ul class="ecr-card-list">${mine.map((b) => `<li><button type="button" class="ec-card ecr-row${b.id === cur.id ? " is-picked" : ""}" data-act="pick-bout" data-id="${esc(b.id)}" data-f="pb:${esc(b.id)}" aria-pressed="${b.id === cur.id}"><span class="ecr-row__n">${b.order}</span><span class="ecr-row__who"><span class="ecr-row__names"><span class="ecr-dot ecr-dot--red" aria-hidden="true"></span>${esc(b.red.name)} <span class="ec-dim">v</span> <span class="ecr-dot ecr-dot--blue" aria-hidden="true"></span>${esc(b.blue.name)}</span><span class="ec-dim ec-small">${esc(stateText(b))}</span></span></button></li>`).join("")}</ul></section>`
     : "";
-  return `${boutHead(cur, false, true)}${panel}
+  return `${boutHead(cur, false, true, ringLabel(event, cur))}${panel}
     <section class="ec-card ecr-mycard" aria-labelledby="ecr-mc-h"><h2 id="ecr-mc-h" class="ecr-h">My card</h2>${total}<ul class="ecr-rrows">${rows}</ul></section>${others}`;
 }
 

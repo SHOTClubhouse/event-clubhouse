@@ -3,7 +3,7 @@
 
 import { esc, side, pitchName, plural } from "/js/ui.js";
 import { tables, champion, winnerOf } from "/core/standings.js";
-import { currentBout, resultText, decision } from "/core/boxing.js";
+import { currentBout, ringsNow, resultText, decision } from "/core/boxing.js";
 
 // ---- Small helpers ----
 export const fmtDate = (d) => (d ? new Date(`${d}T12:00:00`).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "");
@@ -18,6 +18,13 @@ const teamOf = (ev, divId, teamId) => ((divOf(ev, divId) || { teams: [] }).teams
 export const allTeams = (ev) => ev.divisions.flatMap((d) => d.teams.map((t) => ({ ...t, division: d.id, divisionName: d.name })));
 const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 export const isFootball = (ev) => ev.sport === "football";
+export const isJuniors = (ev) => !!(ev.settings && ev.settings.juniors);
+// The sentence that stands where a vote would be, on a youth event.
+export const youthLine = (ev) => `Youth event: no fan voting, ${isFootball(ev) ? "team names only" : "first names and clubs only"}.`;
+const youthNote = (ev) => (isJuniors(ev) ? `<p class="ece-youth" data-youth>${esc(youthLine(ev))}</p>` : "");
+// Boxing with more than one ring: the ring a bout is in (a bout with no ring is in the first).
+export const hasRings = (ev) => ev.sport === "boxing" && (ev.pitches || []).length > 1;
+export const ringName = (ev, b) => (hasRings(ev) ? pitchName(ev, b.pitch || ev.pitches[0].id) : "");
 const hasKnockouts = (ev) => ev.fixtures.some((f) => f.stage);
 const hasTables = (ev) => ev.fixtures.some((f) => !f.stage) && ev.divisions.some((d) => d.format !== "exhibition" && d.format !== "knockout");
 const hasGroups = (ev) => ev.divisions.some((d) => d.teams.some((t) => t.group));
@@ -27,10 +34,12 @@ const empty = (title, body = "") => `<div class="ece-empty"><b>${esc(title)}</b>
 // ---- Which sections apply ----
 export function tabsFor(ev, votes) {
   const f = isFootball(ev);
-  const voteShown = ev.phase === "live" && (ev.settings.vote.open || (votes && votes.total > 0));
+  const voteShown = ev.phase === "live" && !isJuniors(ev) && (ev.settings.vote.open || (votes && votes.total > 0));
+  const club = !!(ev.clubhouse && ev.clubhouse.on === true);
   const t = [];
   if (ev.phase === "pre") {
-    t.push(["home", "Clubhouse"]);
+    t.push(["home", "Home"]);
+    if (club) t.push(["clubhouse", "Clubhouse"]);
     if (f) { if (allTeams(ev).length) t.push(["teams", "Teams"]); if (ev.fixtures.length) t.push(["schedule", "Schedule"]); if (hasGroups(ev)) t.push(["groups", "Groups"]); }
     else if (ev.card.bouts.length) t.push(["card", "Fight card"]);
   } else if (ev.phase === "live") {
@@ -42,8 +51,10 @@ export function tabsFor(ev, votes) {
       if (hasKnockouts(ev)) t.push(["knockouts", "Knockouts"]);
       t.push(["results", "Results"]);
     } else t.push(["card", "Fight card"]);
+    if (club) t.push(["clubhouse", "Clubhouse"]);
   } else {
     t.push(["wrap", "The day"]);
+    if (club) t.push(["clubhouse", "Clubhouse"]);
     if (f) { t.push(["results", "Results"]); if (hasTables(ev)) t.push(["tables", "Tables"]); if (hasKnockouts(ev)) t.push(["knockouts", "Knockouts"]); }
     else t.push(["card", "Fight card"]);
   }
@@ -103,8 +114,8 @@ export function gameCard(ev, f, S, o = {}) {
 // ---- NOW (football) ----
 export function nowFootball(S) {
   const ev = S.event, fx = ev.fixtures, T = terms(ev);
-  if (!fx.length) return empty("Fixtures to follow", "The schedule will appear here as soon as the organiser publishes it.");
-  const out = [];
+  if (!fx.length) return youthNote(ev) + empty("Fixtures to follow", "The schedule will appear here as soon as the organiser publishes it.");
+  const out = [youthNote(ev)];
   const mine = S.follow ? fx.filter((f) => f.state !== "ft" && [side(ev, f, "home").id, side(ev, f, "away").id].includes(S.follow)).sort((a, b) => (b.state === "live") - (a.state === "live") || byTime(a, b))[0] : null;
   if (mine) out.push(`<section class="ece-sec" aria-labelledby="h-mine"><h2 id="h-mine" class="ece-h">Your team</h2>${gameCard(ev, mine, S, { big: true })}</section>`);
   const groups = ev.pitches.map((p) => ({ id: p.id, name: p.name }));
@@ -121,7 +132,7 @@ export function nowFootball(S) {
       ${live.length ? "" : `<p class="ece-note">Between games on this ${T.place}.</p>`}
       ${next.length ? `<h3 class="ece-h3">Up next</h3>${next.map((f) => gameCard(ev, f, S, { pitch: false })).join("")}` : ""}</section>`);
   });
-  if (!anyLive && out.length === (mine ? 1 : 0)) out.push(empty("No games on right now", "Check the schedule for what is next."));
+  if (!anyLive && out.length === (mine ? 2 : 1)) out.push(empty("No games on right now", "Check the schedule for what is next."));
   const done = fx.filter((f) => f.state === "ft").sort((a, b) => (b.ftAt || 0) - (a.ftAt || 0) || byTime(b, a)).slice(0, 4);
   if (done.length) out.push(`<section class="ece-sec" aria-labelledby="h-done"><h2 id="h-done" class="ece-h">Just finished</h2>${done.map((f) => gameCard(ev, f, S)).join("")}<button type="button" class="ec-btn ec-btn--ghost ec-btn--block ece-more" data-go="results">All results</button></section>`);
   return out.join("");
@@ -141,22 +152,34 @@ export function splitBar(r, labels = {}) {
   return `<div class="ece-split" role="img" aria-label="${esc(`${labels.red || "Red"} ${t ? rp : 0} per cent, ${labels.blue || "Blue"} ${t ? 100 - rp : 0} per cent, ${t} votes`)}"><span class="ece-split__r" style="--w:${t ? rp : 50}%"></span><span class="ece-split__b"></span><em>${t ? `${rp}%` : "No votes yet"}</em><em>${t ? `${100 - rp}%` : ""}</em></div>`;
 }
 
-export function nowBoxing(S) {
-  const ev = S.event, b = currentBout(ev.card);
-  if (!b) return empty("Fight card to follow", "Bouts will appear here once the card is published.");
-  const rounds = (S.votes && S.votes.rounds) || [];
+function mainBout(S, b, ring = "") {
+  const ev = S.event, rounds = (S.votes && S.votes.rounds) || [];
   const live = b.state === "live" || b.state === "break";
   const cur = rounds.find((r) => r.bout === b.id && r.round === b.round);
   const open = S.votes && S.votes.now && S.votes.now.some((t) => t.bout === b.id);
-  const upcoming = [...ev.card.bouts].sort((x, y) => x.order - y.order).filter((x) => x.state === "scheduled" && x.id !== b.id).slice(0, 3);
-  const done = ev.card.bouts.filter((x) => x.state === "done").length;
-  return `<section class="ece-sec"><article class="ece-main-bout${live ? " is-live" : ""}">
+  return `<article class="ece-main-bout${live ? " is-live" : ""}"${ring ? ` data-ring="${esc(ring)}"` : ""}>
+    ${ring ? `<h2 class="ece-ringname">${esc(ring)}</h2>` : ""}
     <div class="ece-main-bout__top">${boutState(b)}<span>Bout ${esc(b.order)} of ${ev.card.bouts.length}</span>${b.title ? `<b>${esc(b.title)}</b>` : ""}</div>
     ${live ? `<p class="ece-round">Round <b>${esc(b.round)}</b> of ${esc(b.rounds)}${b.state === "break" ? " &middot; between rounds" : ""}</p>` : `<p class="ece-round">${esc(b.rounds)} rounds${b.weight ? ` &middot; ${esc(b.weight)}` : ""}</p>`}
     ${corners(b, { big: true })}
     ${live && cur ? `<div class="ece-fans"><h3 class="ece-h3">Fans, round ${esc(b.round)}</h3>${splitBar(cur, { red: b.red.name, blue: b.blue.name })}</div>` : ""}
-    ${open ? `<button type="button" class="ec-btn ec-btn--gold ec-btn--block ec-btn--big" data-go="vote">Vote for the round</button>` : ""}
-  </article></section>
+    ${open ? `<button type="button" class="ec-btn ec-btn--gold ec-btn--block ec-btn--big" data-go="vote">Vote for the round${ring ? `<span class="ece-sr"> in ${esc(ring)}</span>` : ""}</button>` : ""}
+  </article>`;
+}
+
+export function nowBoxing(S) {
+  const ev = S.event;
+  const rings = hasRings(ev) ? ringsNow(ev) : [{ ring: null, bout: currentBout(ev.card) }];
+  const first = rings[0] && rings[0].bout;
+  if (!first) return empty("Fight card to follow", "Bouts will appear here once the card is published.");
+  const showing = new Set(rings.map((r) => r.bout.id));
+  const upcoming = [...ev.card.bouts].sort((x, y) => x.order - y.order).filter((x) => x.state === "scheduled" && !showing.has(x.id)).slice(0, 3);
+  const done = ev.card.bouts.filter((x) => x.state === "done").length;
+  const many = rings.length > 1;
+  const main = many
+    ? `<div class="ece-rings">${rings.map((r) => `<section class="ece-ring" aria-label="${esc(pitchName(ev, r.ring))}">${mainBout(S, r.bout, pitchName(ev, r.ring))}</section>`).join("")}</div>`
+    : mainBout(S, first, hasRings(ev) ? pitchName(ev, rings[0].ring) : "");
+  return `<section class="ece-sec">${youthNote(ev)}${main}</section>
   ${upcoming.length ? `<section class="ece-sec" aria-labelledby="h-up"><h2 id="h-up" class="ece-h">Up next</h2>${upcoming.map((x) => boutCard(x, S, { compact: true })).join("")}</section>` : ""}
   <button type="button" class="ec-btn ec-btn--ghost ec-btn--block ece-more" data-go="card">Full fight card${done ? ` (${plural(done, "result")})` : ""}</button>`;
 }
@@ -169,7 +192,7 @@ export function boutCard(b, S, o = {}) {
   const res = b.result ? `<p class="ece-result"><b>${esc(resultText(b))}</b>${judges && b.result.method === "PTS" ? ` <span>Judges: ${judges.totals.map(esc).join(", ")}</span>` : ""}</p>` : "";
   const split = !o.compact && rounds.length ? `<details class="ece-fanround"><summary>Fans, round by round</summary>${rounds.map((r) => `<div class="ece-fanround__r"><span>Round ${esc(r.round)}</span>${splitBar(r, { red: b.red.name, blue: b.blue.name })}</div>`).join("")}</details>` : "";
   return `<article class="ece-bout ece-bout--${esc(b.state)}${b.state === "live" || b.state === "break" ? " is-live" : ""}">
-    <header class="ece-bout__top"><span class="ece-bout__n">${esc(b.order)}</span><span class="ece-bout__t"><b>${esc(b.title || `Bout ${b.order}`)}</b><small>${[b.weight, plural(b.rounds, "round")].filter(Boolean).map(esc).join(" &middot; ")}</small></span>${boutState(b)}</header>
+    <header class="ece-bout__top"><span class="ece-bout__n">${esc(b.order)}</span><span class="ece-bout__t"><b>${esc(b.title || `Bout ${b.order}`)}</b><small>${[ringName(ev, b), b.weight, plural(b.rounds, "round")].filter(Boolean).map(esc).join(" &middot; ")}</small></span>${boutState(b)}</header>
     ${corners(b)}${res}${split}
   </article>`;
 }
@@ -330,7 +353,7 @@ export function wrapView(S) {
     if (done) out.push(`<section class="ece-champ" aria-label="Main event"><p class="ec-kicker">${esc(done.title || "Main event")}</p><p class="ece-champ__n">${esc(done.result.winner ? done[done.result.winner].name : cap(done.result.method === "DRAW" ? "Draw" : "No contest"))}</p><p>${esc(resultText(done))}</p></section>`);
   }
   if (!out.length) out.push(`<section class="ece-champ ece-champ--soft"><p class="ec-kicker">That's a wrap</p><p class="ece-champ__n">Thanks for being there</p><p>${esc(ev.name)} is done. Results and updates are below.</p></section>`);
-  out.push(leaderboard(S, { limit: 5 }));
+  out.push(isJuniors(ev) ? `<section class="ece-sec">${youthNote(ev)}</section>` : leaderboard(S, { limit: 5 }));
   const ups = [...(ev.updates || [])].sort((a, b) => (b.at || 0) - (a.at || 0));
   out.push(`<section class="ece-sec" aria-labelledby="h-up"><h2 id="h-up" class="ece-h">Updates from the organiser</h2>${ups.length ? `<ol class="ece-feed">${ups.map((u) => `<li class="ece-card"><time datetime="${u.at ? new Date(u.at).toISOString() : ""}">${u.at ? esc(new Date(u.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })) : ""}</time><h3>${esc(u.title)}</h3>${u.body ? `<p>${esc(u.body)}</p>` : ""}${u.link ? `<a href="${esc(u.link)}" target="_blank" rel="noopener">Read more</a>` : ""}</li>`).join("")}</ol>` : empty("No updates yet", "The organiser's news and content will appear here.")}</section>`);
   if (ev.links && ev.links.clubhouse) out.push(`<section class="ece-card ece-cta"><p class="ec-kicker">After the day</p><h2 class="ece-h">Stay in the clubhouse</h2><p class="ece-lede">Results, updates and the next event, in one place.</p><a class="ec-btn ec-btn--big ec-btn--block" href="${esc(ev.links.clubhouse)}" target="_blank" rel="noopener">Join the Clubhouse</a></section>`);

@@ -194,3 +194,7 @@
 .ecr-clock__time { font-size: 4.4rem; }
 .ecr-controls { gap: 8px; }
 .ecr-wait { margin: 0; padding: 10px 12px; border-radius: var(--r-sm); border: 1px solid var(--gold); color: var(--gold); font-weight: 700; font-size: 0.92rem; }
+
+/* Rings: the ring name on the bout, and the filter that shows the other rings */
+.ecr-ring { padding: 2px 10px; border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); font-size: 0.7rem; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; }
+.ecr-ringfilter { margin: 0 0 10px; min-height: 44px; }

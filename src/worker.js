@@ -168,6 +168,7 @@ async function full(env, request, url, row, now) {
 const demoBlocked = (o) => !o || typeof o !== "object"
   || (o.op === "stream.set" && !!o.url)
   || (o.op === "update.add" && !!o.link)
+  || o.op === "clubhouse.set"
   || (o.op === "event.set" && (!!(o.theme && o.theme.logo) || o.links != null));
 
 async function ops(env, request, slug, now) {
@@ -175,7 +176,7 @@ async function ops(env, request, slug, now) {
   if (!row0) return fail(404, NOT_FOUND);
   const actor = await staffActor(env, request, row0, null, now);
   const body = await readJson(request);
-  if (row0.demo && row0.listed && Array.isArray(body.ops) && body.ops.some(demoBlocked)) return fail(403, "In the demo, links, video and logos stay as they are. Your own event can change them.");
+  if (row0.demo && row0.listed && Array.isArray(body.ops) && body.ops.some(demoBlocked)) return fail(403, "In the demo, the clubhouse, links, video and logos stay as they are. Your own event can change them.");
   const who = { role: actor.role, id: actor.subject };
   const saved = await mutateEvent(env.DB, slug, (doc) => {
     const r = applyOps(doc, body.ops, who, now);

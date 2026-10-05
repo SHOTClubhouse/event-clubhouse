@@ -4,7 +4,7 @@
 // repo's node_modules (NODE_PATH=<repo>/node_modules also works). Screenshots go to
 // .screens/fan/ and .screens/screen/. Exits non-zero if anything fails.
 import { chromium } from "playwright";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, existsSync } from "node:fs";
 
 const BASE = process.argv[2] || "http://127.0.0.1:8803";
 const CODES = { "beach-soccer-cup": "BCHA-DMNW-X2K7", "fight-night": "FGHT-ADMN-E3F4" };
@@ -30,12 +30,22 @@ async function ops(slug, list) {
 }
 const getJson = async (path) => (await fetch(BASE + path)).json();
 
-const browser = await chromium.launch();
+const devVars = new URL("../../.dev.vars", import.meta.url);
+const vars = existsSync(devVars) ? Object.fromEntries(readFileSync(devVars, "utf8").split(/\r?\n/).map((l) => l.match(/^\s*([A-Z_]+)\s*=\s*(.*?)\s*$/)).filter(Boolean).map((m) => [m[1], m[2]])) : {};
+const SHOT_ADMIN = process.env.SHOT_ADMIN || vars.SHOT_ADMIN || "dev-shot-admin";
+const ipFor = `203.0.113.${Math.floor(Math.random() * 250) + 1}`;
+const jsonCall = async (method, path, body, headers = {}) => {
+  const r = await fetch(BASE + path, { method, headers: { "Content-Type": "application/json", "CF-Connecting-IP": ipFor, ...headers }, body: body ? JSON.stringify(body) : undefined });
+  return { status: r.status, data: await r.json().catch(() => ({})) };
+};
+
+const browser = await chromium.launch(process.env.PW_CHANNEL ? { channel: process.env.PW_CHANNEL } : {});
 const errors = [];
 async function page(w = 390, h = 844, ctxOpts = {}) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, ...ctxOpts });
   const p = await ctx.newPage();
-  p.on("console", (m) => { if (m.type() === "error") errors.push(`${p.url()} ${m.text()}`); });
+  // A machine with no internet cannot reach Google Fonts or Spotify; that is the network, not the page.
+  p.on("console", (m) => { if (m.type() === "error" && !/ERR_(NAME_NOT_RESOLVED|INTERNET_DISCONNECTED)/.test(m.text())) errors.push(`${p.url()} ${m.text()}`); });
   p.on("pageerror", (e) => errors.push(`${p.url()} PAGEERR ${e.message}`));
   return p;
 }
@@ -190,6 +200,103 @@ await step("beach (live): schedule filters, tables and knockouts render", async 
   await p.close();
 });
 
+
+// ---- 2b. The Clubhouse tab ----
+await step("clubhouse (live): #clubhouse opens the tab, patches and the playlist lead, and the player is the Spotify embed", async () => {
+  const ev = (await getJson("/api/events/beach-soccer-cup")).event;
+  if (!ev.fixtures.some((f) => f.state === "live")) await ops("beach-soccer-cup", [{ op: "fixture.state", id: ev.fixtures.find((x) => x.state === "scheduled" && !x.stage).id, state: "live" }]);
+  const p = await page();
+  await p.goto(`${BASE}/e/beach-soccer-cup/#clubhouse`);
+  await p.waitForSelector(".ece-ch");
+  ok((await p.textContent('a.ece-tab[aria-current="page"]')).trim() === "Clubhouse", "the Clubhouse tab is the open one");
+  const heads = await p.locator(".ece-ch > h2").allTextContents();
+  ok(heads[0] === "Patches" && heads[1] === "The playlist", "on the day, patches and the playlist lead: " + heads.join(" | "));
+  const f = p.locator(".ece-spot iframe");
+  ok(await f.count() === 1, "one Spotify player");
+  ok(/^https:\/\/open\.spotify\.com\/embed\/playlist\/[A-Za-z0-9]+$/.test(await f.getAttribute("src")), "embed url: " + await f.getAttribute("src"));
+  ok(await f.getAttribute("loading") === "lazy" && await f.getAttribute("allow") === "encrypted-media" && (await f.getAttribute("title")).length > 5, "lazy, encrypted-media and a title");
+  ok((await p.textContent("#view")).includes("Price set by you"), "tiers say Price set by you");
+  ok((await p.textContent("#view")).includes("A preview of your event's clubhouse in the SHOT Clubhouse app."), "the foot line");
+  ok((await p.locator(".ece-patch.is-locked").first().textContent()).includes("Unlocks in the Clubhouse app"), "streak and share show locked");
+  ok(await p.locator('a.ece-tab[href="#vote"]').count() === 1, "a normal event still has its Vote tab");
+  await p.screenshot({ path: ".screens/fan/clubhouse-live.png", fullPage: true });
+  await p.close();
+});
+await step("clubhouse (pre): register on futsal-finals and the member card shows the first name", async () => {
+  const p = await page();
+  await p.goto(`${BASE}/e/futsal-finals/#clubhouse`);
+  await p.waitForSelector(".ece-ch");
+  const heads = await p.locator(".ece-ch > h2").allTextContents();
+  ok(heads[0] === "Join the clubhouse" && heads[1] === "The line-up", "before the day, join and the line-up lead: " + heads.join(" | "));
+  ok((await p.textContent("[data-member-card]")).includes("Member preview"), "card says Member preview");
+  await p.click(".ece-joinbtn");
+  await p.waitForSelector("form[data-reg]");
+  await p.fill("#reg-name", "Riley");
+  await p.fill("#reg-email", `club${Date.now()}@example.com`);
+  await p.check("input[name=over13]");
+  await p.check("input[name=consent]");
+  await p.click("form[data-reg] button[type=submit]");
+  await p.waitForSelector(".ece-reg--done");
+  await p.click('a.ece-tab[href="#clubhouse"]');
+  await p.waitForSelector(".ece-mcard:not(.is-empty)");
+  ok((await p.textContent("[data-member-name]")).trim() === "Riley", "the card has the name she typed");
+  ok(/Member since/.test(await p.textContent("[data-member-card]")), "member since");
+  await p.screenshot({ path: ".screens/fan/clubhouse-member.png", fullPage: true });
+  await p.reload();
+  await p.waitForSelector(".ece-mcard:not(.is-empty)");
+  ok((await p.textContent("[data-member-name]")).trim() === "Riley", "the name is kept on the device");
+  await p.close();
+});
+await step("clubhouse (live): the first vote unlocks Voice of the crowd, once", async () => {
+  const p = await page();
+  await p.goto(`${BASE}/e/beach-soccer-cup/#vote`);
+  await p.waitForSelector("[data-over13]");
+  await p.click("[data-over13]");
+  await p.waitForSelector(".ece-vcard .ece-chip");
+  await p.locator(".ece-vcard .ece-chip").first().click();
+  await p.locator(".ec-toast", { hasText: "Patch unlocked: Voice of the crowd" }).waitFor({ state: "visible", timeout: 12000 });
+  await p.goto(`${BASE}/e/beach-soccer-cup/#clubhouse`);
+  await p.waitForSelector('[data-patch="B3"].is-on');
+  ok((await p.textContent('[data-patch="B3"]')).includes("Unlocked"), "the patch reads Unlocked");
+  await p.reload();
+  await p.waitForSelector('[data-patch="B3"].is-on');
+  await p.waitForTimeout(3000);
+  ok(await p.locator(".ec-toast", { hasText: "Voice of the crowd" }).count() === 0, "no second toast for a patch already unlocked");
+  await p.close();
+});
+await step("juniors: no Vote tab, no vote prompt, and the youth line stands where voting would be", async () => {
+  const org = await jsonCall("POST", "/api/shot/organisers", { name: `Fan E2E ${Date.now()}` }, { "X-Shot-Admin": SHOT_ADMIN });
+  ok(org.status === 200, "organiser: " + org.status);
+  const session = await jsonCall("POST", "/api/auth/organiser", { key: org.data.key });
+  const made = await jsonCall("POST", "/api/events", { name: `Youth Cup ${Date.now().toString(36)}`, sport: "football", date: "2026-11-14" }, { Authorization: `Bearer ${session.data.token}` });
+  ok(made.status === 200, "event: " + made.status);
+  const slug = made.data.slug;
+  const admin = (await jsonCall("POST", "/api/auth", { code: made.data.adminCode })).data.token;
+  const send = (list) => jsonCall("POST", `/api/events/${slug}/ops`, { ops: list }, { Authorization: `Bearer ${admin}` });
+  const done = await send([
+    { op: "team.add", division: "main", id: "T1", name: "Under 12 Reds" }, { op: "team.add", division: "main", id: "T2", name: "Under 12 Blues" },
+    { op: "fixture.add", fixture: { id: "G1", division: "main", home: "T1", away: "T2", time: "10:00", pitch: "P1", state: "live", homeScore: 0, awayScore: 0 } },
+    { op: "settings.set", juniors: true }, { op: "vote.open", open: true }, { op: "phase.set", phase: "live" },
+    { op: "clubhouse.set", clubhouse: { on: true, intro: "Youth day.", members: 0, tiers: [], culture: { playlist: null, lineup: [], drops: [] }, community: { posts: [], next: [] }, rewards: [{ id: "B1", name: "Voice of the crowd", how: "vote", text: "Cast a vote" }, { id: "B2", name: "There on the day", how: "attend", text: "Opened it live" }] } },
+  ]);
+  ok(done.status === 200, "setup: " + done.status + JSON.stringify(done.data).slice(0, 200));
+  const p = await page();
+  await p.goto(`${BASE}/e/${slug}/`);
+  await p.waitForSelector(".ece-title");
+  await p.waitForSelector("[data-youth]");
+  ok((await p.textContent("[data-youth]")).trim() === "Youth event: no fan voting, team names only.", "the youth line");
+  ok(await p.locator('a.ece-tab[href="#vote"]').count() === 0, "no Vote tab");
+  ok(await p.locator('[data-go="vote"]').count() === 0, "no vote prompt");
+  await p.goto(`${BASE}/e/${slug}/#vote`);
+  await p.waitForSelector(".ece-title");
+  ok(await p.locator("[data-over13]").count() === 0, "#vote shows no voting");
+  await p.goto(`${BASE}/e/${slug}/#clubhouse`);
+  await p.waitForSelector(".ece-ch");
+  ok(!(await p.textContent(".ece-patches")).includes("Voice of the crowd"), "the vote patch is not offered at a youth event");
+  await p.screenshot({ path: ".screens/fan/juniors-clubhouse.png", fullPage: true });
+  await p.close();
+});
+
 // ---- 3. On the day, boxing: fight-night ----
 await step("fight-night (live): round vote with a reason", async () => {
   const ev = (await getJson("/api/events/fight-night")).event;
@@ -243,7 +350,7 @@ await step("sixes-league-night (post): champion, results and the organiser's upd
 for (const [w, h] of [[360, 740], [390, 844], [1440, 900]]) {
   await step(`layout ${w}x${h}: no horizontal scroll on every phase`, async () => {
     const p = await page(w, h);
-    for (const [slug, tabs] of [["futsal-finals", ["home", "teams", "schedule", "groups"]], ["beach-soccer-cup", ["now", "vote", "schedule", "tables", "knockouts", "results"]], ["fight-night", ["now", "vote", "card"]], ["sixes-league-night", ["wrap", "results", "tables"]]]) {
+    for (const [slug, tabs] of [["futsal-finals", ["home", "clubhouse", "teams", "schedule", "groups"]], ["beach-soccer-cup", ["now", "vote", "schedule", "tables", "knockouts", "results", "clubhouse"]], ["fight-night", ["now", "vote", "card", "clubhouse"]], ["sixes-league-night", ["wrap", "clubhouse", "results", "tables"]]]) {
       for (const t of tabs) {
         await p.goto(`${BASE}/e/${slug}/#${t}`);
         await p.waitForSelector(".ece-title");

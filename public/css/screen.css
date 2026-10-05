@@ -165,3 +165,25 @@ html, body.ecv-body { height: 100%; overflow: hidden; cursor: none; }
 .ecv-dots i.on { background: var(--accent); border-color: var(--accent); }
 .ecv-powered { display: inline-flex; align-items: center; gap: 1vw; color: var(--muted); font-size: 2vh; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap; }
 .ecv-powered img { height: 7.5vh; width: auto; }
+
+/* Join the clubhouse */
+.ecv-club { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 3vw; align-items: center; }
+.ecv-club h2 { margin: 0; font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: calc(10vh * var(--f)); line-height: 0.95; overflow-wrap: anywhere; }
+.ecv-club > div > p:not(.ecv-kicker) { color: var(--muted); font-size: calc(3vh * var(--f)); margin: 1.4vh 0 0; }
+.ecv-patches { list-style: none; margin: calc(2.4vh * var(--f)) 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: calc(1.2vh * var(--f)) 1.4vw; }
+.ecv-patch { display: grid; grid-template-columns: calc(4.4vh * var(--f)) minmax(0, 1fr); gap: 1vw; align-items: center; background: var(--panel); border: 1px solid var(--line-soft); border-radius: 1.4vh; padding: calc(1vh * var(--f)) 1vw; }
+.ecv-patch i { display: block; width: calc(4.4vh * var(--f)); height: calc(4.4vh * var(--f)); border: 0.4vh solid var(--accent); border-radius: 1.2vh 1.2vh 50% 50%; }
+.ecv-patch span { display: grid; gap: 0.3vh; min-width: 0; }
+.ecv-patch b { font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: calc(3.2vh * var(--f)); line-height: 1; overflow-wrap: anywhere; }
+.ecv-patch small { color: var(--muted); font-size: calc(2vh * var(--f)); font-weight: 600; }
+
+/* Two or more rings side by side */
+.ecv-rings { display: grid; grid-template-columns: repeat(var(--c, 2), minmax(0, 1fr)); gap: 2.4vw; align-items: stretch; }
+.ecv-ring { display: grid; gap: calc(1.6vh * var(--f)); align-content: center; min-width: 0; padding: calc(2vh * var(--f)) 1.4vw; background: var(--panel); border: 1px solid var(--line-soft); border-radius: 2vh; }
+.ecv-ring__n { margin: 0; font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: calc(5vh * var(--f)); line-height: 1; color: var(--accent); }
+.ecv-ring .ecv-round { margin: 0; }
+.ecv-ring .ecv-vs { grid-template-columns: minmax(0, 1fr); gap: calc(1vh * var(--f)); }
+.ecv-ring .ecv-vs__v { display: none; }
+.ecv-ring .ecv-f { border-left: 1.2vh solid var(--red); border-right: 0; text-align: left; padding: calc(1vh * var(--f)) 0 calc(1vh * var(--f)) 1.2vw; }
+.ecv-ring .ecv-f--blue { border-left: 1.2vh solid var(--blue); padding: calc(1vh * var(--f)) 0 calc(1vh * var(--f)) 1.2vw; }
+.ecv-ring .ecv-f b { font-size: calc(6.4vh * var(--f)); }
