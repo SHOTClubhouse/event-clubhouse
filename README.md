@@ -26,7 +26,9 @@ listed at `/demo/` and from `GET /api/demo`.
 
 The demo simulation runs from the cron trigger. In `npm run dev` it does not fire by itself; start
 the server with `npx wrangler dev --local --persist-to .wrangler/state --test-scheduled`, then
-trigger a tick whenever you like:
+trigger a tick whenever you like. For the browser test suites add `--var SIM_TICKS:1`, so a trigger
+runs one tick and finishes, instead of three ticks 20 seconds apart that keep changing the demos
+while the next suite runs:
 
 ```
 curl "http://127.0.0.1:8787/cdn-cgi/handler/scheduled?cron=*+*+*+*+*"

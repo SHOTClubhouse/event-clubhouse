@@ -1,6 +1,8 @@
 // Browser end-to-end for the organiser dashboard (/admin/).
 //
-//   npx wrangler dev --local --persist-to .wrangler/state-admin --port 8801 --inspector-port 9301 --test-scheduled
+//   npx wrangler dev --local --persist-to .wrangler/state-admin --port 8801 --inspector-port 9301 --test-scheduled --var SIM_TICKS:1
+//   (one sim tick per trigger: with the default three ticks 20 s apart, the sim keeps changing the
+//   demos for about 40 s after this suite ends and the next suite sees bouts it didn't start)
 //   node tests/e2e/admin.mjs [http://127.0.0.1:8801]
 //
 // Needs the playwright package (project node_modules, or NODE_PATH) and SHOT_ADMIN (env or
@@ -438,7 +440,7 @@ await step("demo: sign in to the beach soccer cup and see live games from the si
   await page.getByRole("button", { name: "Open the dashboard" }).click();
   await page.waitForSelector("#panel-title");
   assert.equal(slugOf(), "beach-soccer-cup");
-  fetch(`${base}/cdn-cgi/handler/scheduled?cron=*+*+*+*+*`).catch(() => {}); // wake the simulation
+  await fetch(`${base}/cdn-cgi/handler/scheduled?cron=*+*+*+*+*`).catch(() => {}); // wake the simulation (one tick when the server runs with SIM_TICKS:1)
   await tab("Live control");
   await page.waitForFunction(() => /Live now \(([1-9]\d*)\)/.test(document.querySelector(".ec-seg")?.innerText || ""), null, { timeout: 90000 });
   assert.ok((await page.locator(".ecx-lg.is-live").count()) >= 1);
