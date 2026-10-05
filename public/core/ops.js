@@ -120,7 +120,7 @@ export const OPS = {
   "phase.set": { roles: ADMIN, run(d, o) { if (!PHASES.includes(o.phase)) return "Unknown phase."; d.phase = o.phase; } },
   "settings.set": { roles: ADMIN, run(d, o) {
     if (o.voteBy !== undefined && !VOTE_BY.includes(o.voteBy)) return "Show players by number, name or both.";
-    Object.assign(d.settings, pick(o, ["voteBy", "lockSecs", "points", "showCards", "terms"]));
+    Object.assign(d.settings, pick(o, ["voteBy", "lockSecs", "points", "showCards", "terms", "juniors"]));
   } },
   "vote.open": { roles: ADMIN, run(d, o) { d.settings.vote = { ...d.settings.vote, open: !!o.open }; } },
   "pitch.add": { roles: ADMIN, run(d, o) { d.pitches.push({ id: o.id || newId("P", allIds(d)), name: o.name, stream: { url: null, on: false, label: "" } }); } },

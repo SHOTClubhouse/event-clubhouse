@@ -375,3 +375,28 @@ test("an event's words: football by default, courts and points when set, checked
   assert.equal(r.ok, true);
   assert.equal(terms(r.doc).Place, "Cage");
 });
+
+test("a juniors event shows team names only, boxers by first name, and never opens a vote", () => {
+  const g = generate({ teams: [{ id: "T1", name: "Ayr" }, { id: "T2", name: "Bute" }], format: "league", start: "10:00", gameMins: 10, pitches: ["P1"], division: "main" });
+  const d = blankEvent({ slug: "u14-cup", name: "U14 Cup" });
+  d.divisions[0].teams = g.teams.map((t, i) => ({ ...t, players: [{ id: "p1", number: 7 + i, name: "Sam Brown" }] }));
+  d.divisions[0].format = "league";
+  d.fixtures = g.fixtures.map((f) => ({ ...f, state: "live", homeScore: 0, awayScore: 0 }));
+  d.settings.vote = { open: true };
+  assert.equal(openTargets(d, 0).length, 1);
+  d.settings.juniors = true;
+  assert.deepEqual(validate(d), []);
+  assert.equal(openTargets(d, 0).length, 0);
+  assert.equal(checkVote({ voter: "v-123456789012", over13: true, target: `g:${d.fixtures[0].id}`, choice: "T1.p1" }, d, 0).ok, false);
+  const pub = publicView(d);
+  assert.ok(pub.divisions[0].teams.every((t) => t.players.length === 0));
+  assert.ok(!JSON.stringify(pub).includes("Brown"));
+  const b = blankEvent({ slug: "junior-champs", name: "Junior Champs", sport: "boxing" });
+  b.card.bouts = [{ id: "B1", order: 1, title: "Bout 1", weight: "", rounds: 3, roundMins: 2, scoring: "none", judges: [], red: { name: "Amy Stone", club: "Ely ABC" }, blue: { name: "Kai Reed", club: "Hull ABC" }, state: "scheduled", round: 0, result: null }];
+  b.settings.juniors = true;
+  const pb = publicView(b);
+  assert.deepEqual([pb.card.bouts[0].red.name, pb.card.bouts[0].red.club], ["Amy", "Ely ABC"]);
+  assert.ok(!JSON.stringify(pb).includes("Stone"));
+  d.settings.juniors = "yes";
+  assert.ok(validate(d).some((e) => /juniors/.test(e)));
+});

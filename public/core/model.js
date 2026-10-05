@@ -92,6 +92,7 @@ function check(doc) {
   const pts = s.points || {};
   if (![pts.win, pts.draw, pts.loss].every((n) => Number.isInteger(n) && n >= 0 && n <= 10)) errs.push("settings.points: whole numbers 0 to 10");
   errs.push(...streamErrors(d.stream, "stream"));
+  if (s.juniors != null && typeof s.juniors !== "boolean") errs.push("settings.juniors: true or false");
   if (s.terms != null) {
     const t = s.terms;
     if (typeof t !== "object" || Array.isArray(t)) errs.push("settings.terms: an object");
@@ -253,6 +254,11 @@ export function publicView(doc) {
     t.players = (t.players || []).map((p) => ({ id: p.id, label: playerLabel(p, by), number: by === "name" ? undefined : p.number ?? undefined }));
   }));
   d.officials = d.officials.map((o) => ({ id: o.id, name: firstName(o.name), role: o.role, pitch: o.pitch ?? null }));
+  // Juniors: the public sees team names, and boxers by first name and club. No squads at all.
+  if (d.settings.juniors) {
+    d.divisions.forEach((v) => v.teams.forEach((t) => { t.players = []; }));
+    d.card.bouts.forEach((b) => ["red", "blue"].forEach((c) => { if (b[c]) b[c] = { ...b[c], name: firstName(b[c].name) }; }));
+  }
   const show = d.settings.showCards || "after";
   const done = new Set(d.card.bouts.filter((b) => b.state === "done").map((b) => b.id));
   Object.keys(d.scorecards || {}).forEach((bout) => { if (show === "never" || (show === "after" && !done.has(bout))) delete d.scorecards[bout]; });
